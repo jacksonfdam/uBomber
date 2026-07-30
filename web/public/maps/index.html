@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>uBomber — The 10 districts</title>
+<meta name="description" content="All 10 Stockholm district maps of uBomber, rendered in the game's 2.5D pixel-art style.">
+<style>
+  :root {
+    --bg: #14161c; --surface: #1c1f28; --ink: #e8e6e0; --muted: #8f96a3;
+    --accent: #ffb300; --line: #2a2e3a;
+    color-scheme: dark;
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 48px 20px 96px;
+  }
+  main { max-width: 1040px; margin: 0 auto; }
+  nav { margin-bottom: 32px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  nav a { color: var(--muted); text-decoration: none; }
+  nav a:hover, nav a:focus-visible { color: var(--accent); }
+  header { margin-bottom: 40px; max-width: 65ch; }
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 6px;
+  }
+  h1 {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin-bottom: 12px;
+    text-wrap: balance; letter-spacing: -.01em;
+  }
+  header p.lede { color: var(--muted); }
+  header .legend {
+    display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted);
+  }
+  header .legend b { display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+    margin-right: 6px; vertical-align: -1px; }
+  .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 880px) { .maps { grid-template-columns: 1fr; } }
+  .map {
+    background: var(--surface); border: 1px solid var(--line);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .map img {
+    width: 100%; height: auto; display: block;
+    image-rendering: pixelated;
+    border-bottom: 1px solid var(--line);
+  }
+  .map-info { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px; }
+  .map-info .eyebrow { margin: 0; font-size: 11px; }
+  .map h2 {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 21px; letter-spacing: -.01em;
+  }
+  .map .desc { color: var(--muted); font-size: 14.5px; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
+  .sw {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .sw i { width: 14px; height: 14px; display: inline-block; border: 1px solid var(--line); }
+  footer { margin-top: 48px; color: var(--muted); font-size: 13px; max-width: 65ch; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="/">&larr; uBomber</a></nav>
+  <header>
+    <p class="eyebrow">2.5D art preview</p>
+    <h1>The 10 districts of Stockholm</h1>
+    <p class="lede">Every map shares one 16px pixel-art atlas, scaled 4&times;: neutral grayscale
+    tiles are tinted at runtime with each district&rsquo;s theme colors, so floors, walls, crates
+    and greenery change identity with zero extra sprites. Shown at match start, with the first
+    four spawn points taken.</p>
+    <div class="legend">
+      <span><b style="background:#4f9dde"></b>P1 (double ring = local player)</span>
+      <span><b style="background:#e2574c"></b>P2</span>
+      <span><b style="background:#57b26a"></b>P3</span>
+      <span><b style="background:#e0b34c"></b>P4</span>
+    </div>
+  </header>
+  <div class="maps">
+  <article class="map">
+    <img src="img/gamla-stan.png" alt="Preview of the Gamla Stan map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Gamla Stan (Old Town)</p>
+      <h2>Gamla Stan</h2>
+      <p class="desc">Medieval alleys around Stortorget: a dense maze of narrow lanes where every corner hides a blast.</p>
+      <div class="swatches"><span class="sw" title="floor #d9c8a7"><i style="background:#d9c8a7"></i>floor</span><span class="sw" title="wall #7a5c3d"><i style="background:#7a5c3d"></i>wall</span><span class="sw" title="crate #b5854e"><i style="background:#b5854e"></i>crate</span><span class="sw" title="flame #f2762e"><i style="background:#f2762e"></i>flame</span><span class="sw" title="accent #a63a2a"><i style="background:#a63a2a"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/t-centralen.png" alt="Preview of the T-Centralen map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Norrmalm (Metro hub)</p>
+      <h2>T-Centralen</h2>
+      <p class="desc">Stockholm&#x27;s central metro station: long tunnel corridors and platforms where blasts travel far.</p>
+      <div class="swatches"><span class="sw" title="floor #cfd8dc"><i style="background:#cfd8dc"></i>floor</span><span class="sw" title="wall #37474f"><i style="background:#37474f"></i>wall</span><span class="sw" title="crate #78909c"><i style="background:#78909c"></i>crate</span><span class="sw" title="flame #ffb300"><i style="background:#ffb300"></i>flame</span><span class="sw" title="accent #0277bd"><i style="background:#0277bd"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/sodermalm.png" alt="Preview of the Södermalm map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Södermalm</p>
+      <h2>Södermalm</h2>
+      <p class="desc">The open square at Medborgarplatsen: a wide central plaza with no cover, ringed by cluttered side streets.</p>
+      <div class="swatches"><span class="sw" title="floor #e0d7c6"><i style="background:#e0d7c6"></i>floor</span><span class="sw" title="wall #5d4a42"><i style="background:#5d4a42"></i>wall</span><span class="sw" title="crate #a98467"><i style="background:#a98467"></i>crate</span><span class="sw" title="flame #ff7043"><i style="background:#ff7043"></i>flame</span><span class="sw" title="accent #8e4162"><i style="background:#8e4162"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/ostermalm.png" alt="Preview of the Östermalm map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Östermalm</p>
+      <h2>Östermalm</h2>
+      <p class="desc">Stately boulevards laid out in a perfect grid: the classic arena, elegant and unforgiving.</p>
+      <div class="swatches"><span class="sw" title="floor #e6e1d5"><i style="background:#e6e1d5"></i>floor</span><span class="sw" title="wall #6e6a5e"><i style="background:#6e6a5e"></i>wall</span><span class="sw" title="crate #bfae8e"><i style="background:#bfae8e"></i>crate</span><span class="sw" title="flame #ffa726"><i style="background:#ffa726"></i>flame</span><span class="sw" title="accent #2f4858"><i style="background:#2f4858"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/djurgarden.png" alt="Preview of the Djurgården map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Djurgården (Royal park island)</p>
+      <h2>Djurgården</h2>
+      <p class="desc">Open parkland between the museums: few walls to hide behind, tree lines of crates everywhere.</p>
+      <div class="swatches"><span class="sw" title="floor #d7e4c0"><i style="background:#d7e4c0"></i>floor</span><span class="sw" title="wall #4e6e46"><i style="background:#4e6e46"></i>wall</span><span class="sw" title="crate #a07a44"><i style="background:#a07a44"></i>crate</span><span class="sw" title="flame #ff8f00"><i style="background:#ff8f00"></i>flame</span><span class="sw" title="accent #3e7c4f"><i style="background:#3e7c4f"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/vasastan.png" alt="Preview of the Vasastan map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Vasastan</p>
+      <h2>Vasastan</h2>
+      <p class="desc">Dense turn-of-the-century housing blocks: tight courtyards packed with cover and short escape routes.</p>
+      <div class="swatches"><span class="sw" title="floor #e3d5c8"><i style="background:#e3d5c8"></i>floor</span><span class="sw" title="wall #7b3f2e"><i style="background:#7b3f2e"></i>wall</span><span class="sw" title="crate #c07a50"><i style="background:#c07a50"></i>crate</span><span class="sw" title="flame #ffa000"><i style="background:#ffa000"></i>flame</span><span class="sw" title="accent #9c4722"><i style="background:#9c4722"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/kungsholmen.png" alt="Preview of the Kungsholmen map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Kungsholmen</p>
+      <h2>Kungsholmen</h2>
+      <p class="desc">The Norr Mälarstrand waterfront: a long quay wall splits the island from the shore promenade.</p>
+      <div class="swatches"><span class="sw" title="floor #d6e4e8"><i style="background:#d6e4e8"></i>floor</span><span class="sw" title="wall #4a6670"><i style="background:#4a6670"></i>wall</span><span class="sw" title="crate #a58d6f"><i style="background:#a58d6f"></i>crate</span><span class="sw" title="flame #ffb300"><i style="background:#ffb300"></i>flame</span><span class="sw" title="accent #2e7d9c"><i style="background:#2e7d9c"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/skansen.png" alt="Preview of the Skansen map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Djurgården (Open-air museum)</p>
+      <h2>Skansen</h2>
+      <p class="desc">The world&#x27;s oldest open-air museum: fenced enclosures and farmsteads turn the arena into paddocks.</p>
+      <div class="swatches"><span class="sw" title="floor #dccfb3"><i style="background:#dccfb3"></i>floor</span><span class="sw" title="wall #5f4b32"><i style="background:#5f4b32"></i>wall</span><span class="sw" title="crate #9c7643"><i style="background:#9c7643"></i>crate</span><span class="sw" title="flame #ef6c00"><i style="background:#ef6c00"></i>flame</span><span class="sw" title="accent #6d8b3d"><i style="background:#6d8b3d"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/slussen.png" alt="Preview of the Slussen map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Södermalm (The lock)</p>
+      <h2>Slussen</h2>
+      <p class="desc">The eternally-under-construction interchange: a concrete ring in the middle funnels everyone together.</p>
+      <div class="swatches"><span class="sw" title="floor #d8d8d8"><i style="background:#d8d8d8"></i>floor</span><span class="sw" title="wall #5c5c66"><i style="background:#5c5c66"></i>wall</span><span class="sw" title="crate #a08464"><i style="background:#a08464"></i>crate</span><span class="sw" title="flame #ff9100"><i style="background:#ff9100"></i>flame</span><span class="sw" title="accent #c98f00"><i style="background:#c98f00"></i>accent</span></div>
+    </div>
+  </article>
+  <article class="map">
+    <img src="img/skargarden.png" alt="Preview of the Skärgården map" width="480" height="416" loading="lazy">
+    <div class="map-info">
+      <p class="eyebrow">Stockholm Archipelago</p>
+      <h2>Skärgården</h2>
+      <p class="desc">Rocky islets scattered across open water: wall clusters form islands, crates bridge the channels.</p>
+      <div class="swatches"><span class="sw" title="floor #cfe3e8"><i style="background:#cfe3e8"></i>floor</span><span class="sw" title="wall #3f5d68"><i style="background:#3f5d68"></i>wall</span><span class="sw" title="crate #b08f62"><i style="background:#b08f62"></i>crate</span><span class="sw" title="flame #ffab00"><i style="background:#ffab00"></i>flame</span><span class="sw" title="accent #d64545"><i style="background:#d64545"></i>accent</span></div>
+    </div>
+  </article>
+  </div>
+  <footer>
+    Base art: <a href="https://opengameart.org/content/bomb-party-the-complete-set">Bomb Party
+    &mdash; the complete set</a> (CC-BY 3.0 &mdash; Matt Hackett/Lost Decade Games, Cem Kalyoncu,
+    usr_share), repacked by <code>game/tools/build_atlas.py</code>. Crates mark destructible
+    cells; dark-faced blocks are solid walls.
+  </footer>
+</main>
+</body>
+</html>
