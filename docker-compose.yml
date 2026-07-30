@@ -1,0 +1,16 @@
+# Local play: serves the landing page + exported game with the same
+# cross-origin isolation headers Vercel applies in production.
+#
+# The Supabase stack itself is also Docker-based but managed by the Supabase
+# CLI (`supabase start`), which is the officially supported way to run it
+# locally. See docs/LOCAL_DEVELOPMENT.md for the full walkthrough.
+services:
+  web:
+    image: nginx:1.27-alpine
+    container_name: ubomber-web
+    ports:
+      - "8080:80"
+    volumes:
+      - ./web/public:/usr/share/nginx/html:ro
+      - ./ops/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped

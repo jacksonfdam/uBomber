@@ -11,6 +11,7 @@ web/public/game/*
 .env
 .env.local
 *.local.json
+web/public/config.json
 
 # Supabase local state
 supabase/.branches/
