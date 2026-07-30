@@ -14,8 +14,8 @@ tiers that comfortably run this game.
    ```bash
    cd game
    npm install
-   npm run build        # TypeScript → scripts/**/*.js
-   npm run bundle:net   # network layer + supabase-js → scripts/net/bundle.js
+   npm run build        # TypeScript → .godot/GodotJS/ (engine-side mirror)
+   npm run bundle:net   # network layer + supabase-js → web/public/game/net-bundle.js
    ```
 
 3. Export with the bundled **Web** preset (writes to `web/public/game/`):

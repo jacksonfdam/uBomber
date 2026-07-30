@@ -58,14 +58,18 @@ Thin scripts attached to Godot nodes:
 - `maps.ts` / `net_bridge.ts` — resource loading and the require-bridge to
   the bundled network layer.
 
-GodotJS compiles `src/**/*.ts` to `scripts/**/*.js` (plain `tsc`), which the
-engine loads as scripts. `typings/godot.d.ts` is a loose stub so the project
+Scenes attach the `.ts` sources directly (GodotJS convention); `tsc`
+compiles them into the `.godot/GodotJS/` mirror, which the engine loads and
+the exporter packs. `typings/godot.d.ts` is a loose stub so the project
 typechecks without an editor; the GodotJS editor can generate exact typings
 that replace it.
 
 Note on npm packages: GodotJS does not resolve `node_modules` at runtime, so
 `npm run bundle:net` packs the network layer (including
-`@supabase/supabase-js`) into a single `scripts/net/bundle.js` with esbuild.
+`@supabase/supabase-js`) into an IIFE (`globalThis.UBomberNet`) emitted to
+`web/public/game/net-bundle.js`. The web export loads it with a `<script>`
+tag injected via the preset's `html/head_include`, and
+`src/godot/net_bridge.ts` picks it up from the global.
 
 ## Data
 

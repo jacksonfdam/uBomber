@@ -26,11 +26,12 @@ tests alone — no engine required.
 ## 2. Compile the scripts
 
 ```bash
-make build     # tsc → game/scripts/ + esbuild bundle of the net layer
+make build     # tsc → game/.godot/GodotJS/ + esbuild bundle of the net layer
 ```
 
-GodotJS loads the compiled `game/scripts/**/*.js`. Re-run after every
-TypeScript change (or keep `npx tsc -w` running).
+Scenes reference the `.ts` files; the engine runs the compiled mirror in
+`game/.godot/GodotJS/`. Re-run after every TypeScript change (or keep
+`npx tsc -w` running).
 
 ## 3. Backend (Supabase in Docker)
 
