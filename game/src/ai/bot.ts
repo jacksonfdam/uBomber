@@ -135,6 +135,30 @@ export function dangerMap(
   }));
   if (extra) bombs.push({ ...extra, at: BOMB_FUSE });
 
+  // Chain detonations: a bomb caught in another blast explodes early, so
+  // every bomb inherits the earliest fuse that can reach it.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const a of bombs) {
+      for (const dir of DIRS) {
+        for (let r = 1; r <= a.range; r++) {
+          const x = a.x + dir.x * r;
+          const y = a.y + dir.y * r;
+          if (outOfBounds(x, y) || state.grid[y][x] !== 'floor') break;
+          const hit = bombs.find((b) => b.x === x && b.y === y);
+          if (hit) {
+            if (a.at < hit.at) {
+              hit.at = a.at;
+              changed = true;
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
+
   for (const b of bombs) {
     mark(danger, b.x, b.y, b.at);
     for (const dir of DIRS) {
