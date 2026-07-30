@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+game/scripts/
+game/.godot/
+web/public/game/*
+!web/public/game/README.md
+
+# Environment
+.env
+.env.local
+*.local.json
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Claude Code local settings
+.claude/
