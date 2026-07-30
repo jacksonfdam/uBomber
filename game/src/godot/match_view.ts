@@ -105,8 +105,13 @@ export default class MatchView extends Node2D {
   onLocalInput: ((input: PlayerInput) => void) | null = null;
   onFinished: ((winner: number | null, state: GameState) => void) | null = null;
 
+  private font: unknown = null;
+
   _ready(): void {
     this.atlas = ResourceLoader.load(ATLAS_PATH);
+    this.font = ResourceLoader.load(
+      'res://assets/fonts/PressStart2P-Regular.ttf'
+    );
     // CanvasItem.TEXTURE_FILTER_NEAREST: keep the pixel art crisp at 4x.
     this.texture_filter = 1;
   }
@@ -325,6 +330,43 @@ export default class MatchView extends Node2D {
     this.drawFlames(state);
     this.drawBombs(state);
     this.drawSolidsAndPlayers(state);
+    this.drawScores(state);
+  }
+
+  /** Live scoreboard in the left margin: color chip, name and points per
+   * player; dead players gray out. */
+  private drawScores(state: GameState): void {
+    if (!this.font) return;
+    const gold = new Color(1, 0.84, 0.35, 1);
+    const dead = new Color(0.45, 0.45, 0.45, 1);
+
+    for (let i = 0; i < state.players.length; i++) {
+      const p = state.players[i];
+      const y = 26 + i * 62;
+
+      this.draw_rect(
+        new Rect2(new Vector2(14, y), new Vector2(16, 16)),
+        p.alive ? this.playerCols[p.id] : dead
+      );
+      this.draw_string(
+        this.font,
+        new Vector2(38, y + 13),
+        p.name.slice(0, 12),
+        0,
+        -1,
+        9,
+        p.alive ? this.white : dead
+      );
+      this.draw_string(
+        this.font,
+        new Vector2(14, y + 38),
+        String(p.score),
+        0,
+        -1,
+        12,
+        p.alive ? gold : dead
+      );
+    }
   }
 
   private drawFloor(): void {
