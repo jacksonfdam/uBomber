@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2021",
     "lib": ["ES2021", "DOM"],
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "rootDir": ".",
     "outDir": "./.godot/GodotJS",
     "strict": true,

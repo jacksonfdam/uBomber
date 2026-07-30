@@ -12,11 +12,11 @@
     "bundle:net": "esbuild src/net/bundle-entry.ts --bundle --format=iife --global-name=UBomberNet --platform=browser --outfile=../web/public/game/net-bundle.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.48.0"
+    "@supabase/supabase-js": "^2.111.0"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }
