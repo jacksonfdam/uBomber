@@ -14,3 +14,10 @@ Changes made: sprites were re-packed into a smaller atlas; tiles tinted by map
 themes at runtime (floor, wall, crate, bush) were converted to normalized
 grayscale; a few small procedural sprites (shadow, ring, power-up panel,
 lightning icon) were added.
+
+## Press Start 2P (font)
+
+- File: `game/assets/fonts/PressStart2P-Regular.ttf`
+- Source: https://fonts.google.com/specimen/Press+Start+2P
+- License: [SIL Open Font License 1.1](../fonts/OFL.txt)
+- Credits: Cody "CodeMan38" Boisclair (The Press Start 2P Project Authors)

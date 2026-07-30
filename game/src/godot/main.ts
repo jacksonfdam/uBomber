@@ -210,7 +210,9 @@ export default class Main extends Control {
     this.view = view;
     this.node('MatchContainer').add_child(view);
     this.node<Control>('Menu').visible = false;
+    this.node<Control>('MenuPanel').visible = false;
     this.node<Control>('Lobby').visible = false;
+    this.node<Control>('LobbyPanel').visible = false;
     this.node<Control>('MenuBackground').visible = false;
     this.node<Label>('HudLabel').text =
       `${def.name} — ${def.district}. Arrows/WASD to move, Space to bomb.`;
@@ -251,7 +253,9 @@ export default class Main extends Control {
 
   private showMenu(): void {
     this.node<Control>('Menu').visible = true;
+    this.node<Control>('MenuPanel').visible = true;
     this.node<Control>('Lobby').visible = false;
+    this.node<Control>('LobbyPanel').visible = false;
     this.node<Control>('MenuBackground').visible = true;
     this.node<Label>('HudLabel').visible = false;
     this.setStatus('');
@@ -262,7 +266,9 @@ export default class Main extends Control {
 
   private showLobby(code: string, isHost: boolean): void {
     this.node<Control>('Menu').visible = false;
+    this.node<Control>('MenuPanel').visible = false;
     this.node<Control>('Lobby').visible = true;
+    this.node<Control>('LobbyPanel').visible = true;
     AudioBank.playMusic('lobby');
     this.node<Label>('Lobby/CodeLabel').text = `Room code: ${code}`;
     this.node<Label>('Lobby/InviteLabel').text =
