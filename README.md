@@ -25,6 +25,10 @@ backed by [Supabase](https://supabase.com) Realtime, hosted on
 - 🌱 Deterministic seeded arenas — every peer sees the same crates
 - 🧪 The whole simulation is pure TypeScript with 60+ unit tests; the engine
   only renders
+- 🔊 Full audio support (menu, music, bombs, explosions, jingles) with
+  **bring-your-own sound packs** — the repo ships silent for licensing
+  reasons; install any Power-Bomberman-layout pack with
+  `ops/install-sound-pack.sh` (see [game/assets/audio](game/assets/audio/README.md))
 
 ## Quick start
 
