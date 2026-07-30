@@ -75,6 +75,8 @@ export interface GameState {
   flames: FlameState[];
   powerups: PowerUpState[];
   nextBombId: number;
+  /** How many sudden-death wall tiles have been placed so far. */
+  suddenDeathClosed: number;
   /** Mulberry32 state; advances deterministically with each random draw. */
   rngState: number;
 }

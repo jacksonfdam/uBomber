@@ -17,6 +17,8 @@ import {
   SCORE_SUICIDE,
   SCORE_WIN,
   SPEED_INCREMENT,
+  SUDDEN_DEATH_INTERVAL,
+  SUDDEN_DEATH_START,
   TILE_COLS,
   TILE_ROWS,
 } from './constants';
@@ -77,9 +79,37 @@ export function createGame(
     flames: [],
     powerups: [],
     nextBombId: 1,
+    suddenDeathClosed: 0,
     rngState: (seed ^ 0x9e3779b9) | 0,
   };
 }
+
+/**
+ * The order in which sudden-death walls close over the interior: a spiral
+ * from the outer ring inward, matching the classic "hurry up!" behavior.
+ */
+export const SUDDEN_DEATH_ORDER: Vec2[] = (() => {
+  const order: Vec2[] = [];
+  let left = 1;
+  let top = 1;
+  let right = TILE_COLS - 2;
+  let bottom = TILE_ROWS - 2;
+  while (left <= right && top <= bottom) {
+    for (let x = left; x <= right; x++) order.push({ x, y: top });
+    for (let y = top + 1; y <= bottom; y++) order.push({ x: right, y });
+    if (top < bottom) {
+      for (let x = right - 1; x >= left; x--) order.push({ x, y: bottom });
+    }
+    if (left < right) {
+      for (let y = bottom - 1; y > top; y--) order.push({ x: left, y });
+    }
+    left++;
+    top++;
+    right--;
+    bottom--;
+  }
+  return order;
+})();
 
 /** Advances the simulation by dt seconds. Mutates state in place. */
 export function step(
@@ -102,7 +132,41 @@ export function step(
   updateBombs(state, dt);
   updateFlames(state, dt);
   killPlayersInFlames(state);
+  updateSuddenDeath(state);
   resolveOutcome(state, dt);
+}
+
+/** From SUDDEN_DEATH_START on, walls close over the arena one tile at a
+ * time, crushing players, bombs, power-ups and flames beneath them. */
+function updateSuddenDeath(state: GameState): void {
+  if (state.time <= SUDDEN_DEATH_START) return;
+  const expected = Math.min(
+    SUDDEN_DEATH_ORDER.length,
+    Math.floor((state.time - SUDDEN_DEATH_START) / SUDDEN_DEATH_INTERVAL)
+  );
+
+  while (state.suddenDeathClosed < expected) {
+    const t = SUDDEN_DEATH_ORDER[state.suddenDeathClosed++];
+    state.grid[t.y][t.x] = 'wall';
+
+    for (const b of state.bombs) {
+      if (b.x === t.x && b.y === t.y) {
+        const owner = state.players[b.owner];
+        if (owner) owner.activeBombs = Math.max(0, owner.activeBombs - 1);
+      }
+    }
+    state.bombs = state.bombs.filter((b) => !(b.x === t.x && b.y === t.y));
+    state.powerups = state.powerups.filter(
+      (u) => !(u.x === t.x && u.y === t.y)
+    );
+    state.flames = state.flames.filter((f) => !(f.x === t.x && f.y === t.y));
+
+    for (const p of state.players) {
+      if (!p.alive) continue;
+      const here = tileOf(p.pos);
+      if (here.x === t.x && here.y === t.y) p.alive = false;
+    }
+  }
 }
 
 export function tileOf(pos: Vec2): Vec2 {

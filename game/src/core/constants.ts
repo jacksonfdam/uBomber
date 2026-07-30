@@ -26,6 +26,10 @@ export const POWERUP_DROP_CHANCE = 0.35;
 /** Match. */
 export const MATCH_TIME_SECONDS = 180;
 
+/** Sudden death: walls spiral in from the border, crushing what they cover. */
+export const SUDDEN_DEATH_START = 120;
+export const SUDDEN_DEATH_INTERVAL = 0.35;
+
 /** Arcade scoring. */
 export const SCORE_CRATE = 10;
 export const SCORE_POWERUP = 25;

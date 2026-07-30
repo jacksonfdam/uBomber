@@ -113,6 +113,36 @@ describe('BotController', () => {
     }
   );
 
+  it.each([1, 42, 777])(
+    'resolves a 1v1 endgame duel instead of dancing forever (seed %i)',
+    (seed) => {
+      const state = createGame(
+        OPEN_MAP,
+        [
+          { kind: 'bot', name: 'A' },
+          { kind: 'bot', name: 'B' },
+        ],
+        seed
+      );
+      const bots = state.players.map((p) => new BotController(p.id));
+
+      const maxTicks = Math.round(185 / TICK_DT);
+      let bombsPlaced = 0;
+      for (let i = 0; i < maxTicks && state.status === 'running'; i++) {
+        const inputs = bots.map((b) => b.update(state, TICK_DT));
+        const before = state.bombs.length;
+        step(state, inputs, TICK_DT);
+        if (state.bombs.length > before) bombsPlaced++;
+      }
+
+      // Overlap targeting, the stall breaker and sudden death together
+      // guarantee the duel ends decisively before the 180s draw timer.
+      expect(state.status).toBe('finished');
+      expect(bombsPlaced).toBeGreaterThan(0);
+      expect(state.time).toBeLessThan(180);
+    }
+  );
+
   it('plays a full match without stalling: bombs are placed and crates fall', () => {
     const state = createGame(
       loadMap('gamla-stan'),

@@ -10,6 +10,8 @@ import {
   SCORE_SUICIDE,
   SCORE_WIN,
   SPEED_INCREMENT,
+  SUDDEN_DEATH_INTERVAL,
+  SUDDEN_DEATH_START,
   TICK_DT,
 } from '../src/core/constants';
 import { createGame, flameAt, step } from '../src/core/game';
@@ -233,6 +235,23 @@ describe('scoring', () => {
     expect(state.players[0].alive).toBe(false);
     expect(state.players[0].score).toBe(SCORE_SUICIDE);
     expect(state.players[1].score).toBe(SCORE_WIN);
+  });
+});
+
+describe('sudden death', () => {
+  it('closes walls over the arena and crushes whoever stands there', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    // Player 0 sits on the first spiral tile (1,1); player 1 is far away.
+    state.players[1].pos = { x: 7.5, y: 7.5 };
+    state.time = SUDDEN_DEATH_START + SUDDEN_DEATH_INTERVAL * 3 + 0.01;
+
+    step(state, [], TICK_DT);
+
+    expect(state.suddenDeathClosed).toBeGreaterThanOrEqual(3);
+    expect(state.grid[1][1]).toBe('wall');
+    expect(state.players[0].alive).toBe(false);
+    expect(state.status).toBe('finished');
+    expect(state.winner).toBe(1);
   });
 });
 

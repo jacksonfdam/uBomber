@@ -1,5 +1,12 @@
-import { BOMB_FUSE, FLAME_TTL, TILE_COLS, TILE_ROWS } from '../core/constants';
-import { bombAt, tileOf } from '../core/game';
+import {
+  BOMB_FUSE,
+  FLAME_TTL,
+  SUDDEN_DEATH_INTERVAL,
+  SUDDEN_DEATH_START,
+  TILE_COLS,
+  TILE_ROWS,
+} from '../core/constants';
+import { bombAt, SUDDEN_DEATH_ORDER, tileOf } from '../core/game';
 import type { GameState, PlayerInput, PlayerState, Vec2 } from '../core/types';
 import { IDLE_INPUT } from '../core/types';
 
@@ -27,6 +34,8 @@ export class BotController {
   private path: Vec2[] = [];
   private replanIn = 0;
   private wantBomb = false;
+  /** Seconds spent hugging an enemy without finding a shot (stall breaker). */
+  private stalledFor = 0;
 
   constructor(public readonly slot: number) {}
 
@@ -63,11 +72,13 @@ export class BotController {
     here: Vec2
   ): void {
     if (danger[here.y][here.x] !== Infinity) {
+      this.stalledFor = 0;
       this.path = fleePath(state, here, danger, me.speed);
       return;
     }
 
     if (this.shouldBomb(state, me, here)) {
+      this.stalledFor = 0;
       this.wantBomb = true;
       const withBomb = dangerMap(state, {
         x: here.x,
@@ -76,6 +87,26 @@ export class BotController {
       });
       this.path = fleePath(state, here, withBomb, me.speed);
       return;
+    }
+
+    // Stall breaker: hugging an enemy without ever getting a safe shot turns
+    // into an endless corner dance (two symmetric bots chase each other's
+    // tile forever). After a couple of seconds of that, wander somewhere
+    // else — slot-dependent, so both duelists break in different directions.
+    const enemyNearby = state.players.some((p) => {
+      if (!p.alive || p.id === me.id) return false;
+      const t = tileOf(p.pos);
+      return Math.abs(t.x - here.x) + Math.abs(t.y - here.y) <= 1;
+    });
+    this.stalledFor = enemyNearby ? this.stalledFor + REPLAN_INTERVAL : 0;
+
+    if (this.stalledFor > 2) {
+      this.stalledFor = 0;
+      const wander = wanderPath(state, here, danger, this.slot);
+      if (wander.length > 0) {
+        this.path = wander;
+        return;
+      }
     }
 
     this.path = huntPath(state, me, here, danger);
@@ -92,8 +123,10 @@ export class BotController {
     });
     const escape = fleePath(state, here, withBomb, me.speed);
     if (escape.length === 0) return false;
-    // Only commit if the escape fits comfortably inside the fuse.
-    return escape.length / me.speed <= BOMB_FUSE - 0.5;
+    // Only commit if the escape fits inside the fuse; as the match drags on,
+    // accept tighter escapes so endgame duels actually resolve.
+    const margin = state.time > 90 ? 0.2 : 0.4;
+    return escape.length / me.speed <= BOMB_FUSE - margin;
   }
 
   private followPath(me: PlayerState): PlayerInput {
@@ -181,6 +214,21 @@ export function dangerMap(
         if (state.grid[y][x] === 'crate') break;
         if (bombAt(state, x, y)) break;
       }
+    }
+  }
+
+  // Sudden death: treat the next few tiles of the closing spiral as timed
+  // hazards so bots step out of the wall's way.
+  if (state.time > SUDDEN_DEATH_START - 3) {
+    const upcoming = Math.min(
+      SUDDEN_DEATH_ORDER.length,
+      state.suddenDeathClosed + 10
+    );
+    for (let k = state.suddenDeathClosed; k < upcoming; k++) {
+      const closeAt =
+        SUDDEN_DEATH_START + (k + 1) * SUDDEN_DEATH_INTERVAL - state.time;
+      const t = SUDDEN_DEATH_ORDER[k];
+      mark(danger, t.x, t.y, Math.max(0, closeAt));
     }
   }
   return danger;
@@ -271,6 +319,33 @@ function huntPath(
   return toEnemy ?? [];
 }
 
+/** Safe tile a few steps away; the slot seasons the pick so two stalled
+ * duelists scatter instead of mirroring each other. */
+function wanderPath(
+  state: GameState,
+  from: Vec2,
+  danger: number[][],
+  slot: number
+): Vec2[] {
+  const far = bfs(
+    state,
+    from,
+    (x, y, dist) =>
+      dist >= 3 &&
+      danger[y][x] === Infinity &&
+      (x * 7 + y * 13 + slot * 5) % 3 === 0,
+    (x, y) => danger[y][x] !== Infinity
+  );
+  if (far) return far;
+  const any = bfs(
+    state,
+    from,
+    (x, y, dist) => dist >= 2 && danger[y][x] === Infinity,
+    (x, y) => danger[y][x] !== Infinity
+  );
+  return any ?? [];
+}
+
 /**
  * Breadth-first search over walkable tiles. Returns the path (excluding the
  * start tile) to the first tile matching `goal`, or null. `blocked` vetoes
@@ -340,6 +415,10 @@ function blastHitsTarget(
         return `${t.x},${t.y}`;
       })
   );
+
+  // Players can pass through each other; an enemy sharing this very tile is
+  // the best target of all (this used to deadlock the 1v1 endgame).
+  if (enemyTiles.has(`${here.x},${here.y}`)) return true;
 
   for (const dir of DIRS) {
     for (let r = 1; r <= me.flameRange; r++) {
