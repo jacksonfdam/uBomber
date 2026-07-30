@@ -261,7 +261,13 @@ export default class MatchView extends Node2D {
   private notifyFinished(): void {
     if (this.finishedNotified || !this.state) return;
     this.finishedNotified = true;
-    this.onFinished?.(this.state.winner, this.state);
+    try {
+      this.onFinished?.(this.state.winner, this.state);
+    } catch {
+      // Last-resort recovery: a crashing finish handler must not soft-lock
+      // the match screen — fall back to the skip path (menu / retry).
+      this.onSkip?.();
+    }
   }
 
   private readLocalInput(): PlayerInput {

@@ -276,16 +276,6 @@ export default class Main extends Control {
       void this.room.send({ type: 'game_over', winner });
     }
 
-    const mapId = this.currentMapId ?? this.mapIds[0];
-    recordResults(
-      state.players.map((p) => ({
-        name: p.name,
-        mapId,
-        score: p.score,
-        won: p.id === winner,
-      }))
-    );
-
     const scoreboard = [...state.players]
       .sort((a, b) => b.score - a.score)
       .map((p) => `${p.name} ${p.score}`)
@@ -293,27 +283,45 @@ export default class Main extends Control {
     const headline =
       winner === null ? 'Draw!' : `${state.players[winner].name} wins!`;
 
+    // Persistence and campaign bookkeeping are best-effort: any failure in
+    // here must never keep the end screen (and the return to menu) from
+    // happening — that soft-locked finished matches once.
     this.afterMatch = 'menu';
     let epilogue = '';
-    if (this.campaign) {
-      const localWon = winner === 0;
-      if (localWon && this.campaignMapId) {
-        if (!this.progress.completed.includes(this.campaignMapId)) {
-          this.progress.completed.push(this.campaignMapId);
-        }
-        this.progress.totalScore += state.players[0].score;
-        saveCampaign(this.progress);
-        const remaining = this.mapIds.length - this.progress.completed.length;
-        if (remaining > 0) {
-          this.afterMatch = 'campaign-next';
-          epilogue = ` Next stop: ${loadMapDef(this.nextCampaignMap()!).name}…`;
+    try {
+      const mapId = this.currentMapId ?? this.mapIds[0];
+      recordResults(
+        state.players.map((p) => ({
+          name: p.name,
+          mapId,
+          score: p.score,
+          won: p.id === winner,
+        }))
+      );
+
+      if (this.campaign) {
+        const localWon = winner === 0;
+        if (localWon && this.campaignMapId) {
+          if (!this.progress.completed.includes(this.campaignMapId)) {
+            this.progress.completed.push(this.campaignMapId);
+          }
+          this.progress.totalScore += state.players[0].score;
+          saveCampaign(this.progress);
+          const remaining =
+            this.mapIds.length - this.progress.completed.length;
+          if (remaining > 0) {
+            this.afterMatch = 'campaign-next';
+            epilogue = ` Next stop: ${loadMapDef(this.nextCampaignMap()!).name}…`;
+          } else {
+            epilogue = ` CAMPAIGN COMPLETE — ${this.progress.totalScore} pts!`;
+          }
         } else {
-          epilogue = ` CAMPAIGN COMPLETE — ${this.progress.totalScore} pts!`;
+          this.afterMatch = 'campaign-retry';
+          epilogue = ' Try this map again…';
         }
-      } else {
-        this.afterMatch = 'campaign-retry';
-        epilogue = ' Try this map again…';
       }
+    } catch {
+      /* keep going — the end screen must always show */
     }
 
     this.node<Label>('HudLabel').text = `${headline}  ${scoreboard}.${epilogue}`;

@@ -24,9 +24,18 @@ const CAMPAIGN_PATH = 'user://campaign.json';
 const RANKINGS_PATH = 'user://rankings.json';
 const MAX_ENTRIES = 200;
 
+/** GodotJS exposes class enums either flat (FileAccess.WRITE) or namespaced
+ * (FileAccess.ModeFlags.WRITE) depending on the binding version; 2 is the
+ * documented value of ModeFlags.WRITE and the last-resort fallback. */
+const WRITE_MODE =
+  (FileAccess as { ModeFlags?: { WRITE?: number }; WRITE?: number })
+    .ModeFlags?.WRITE ??
+  (FileAccess as { WRITE?: number }).WRITE ??
+  2;
+
 function readJson<T>(path: string): T | null {
-  if (!FileAccess.file_exists(path)) return null;
   try {
+    if (!FileAccess.file_exists(path)) return null;
     return JSON.parse(String(FileAccess.get_file_as_string(path))) as T;
   } catch {
     return null;
@@ -34,10 +43,15 @@ function readJson<T>(path: string): T | null {
 }
 
 function writeJson(path: string, value: unknown): void {
-  const file = FileAccess.open(path, FileAccess.WRITE);
-  if (!file) return;
-  file.store_string(JSON.stringify(value));
-  file.close();
+  // Persistence is best-effort: a storage failure must never break gameplay.
+  try {
+    const file = FileAccess.open(path, WRITE_MODE);
+    if (!file) return;
+    file.store_string(JSON.stringify(value));
+    file.close();
+  } catch {
+    /* ignore */
+  }
 }
 
 // ------------------------------------------------------------- campaign
