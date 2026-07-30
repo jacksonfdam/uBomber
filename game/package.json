@@ -1,0 +1,22 @@
+{
+  "name": "@ubomber/game",
+  "private": true,
+  "version": "0.1.0",
+  "description": "uBomber game: GodotJS project plus the engine-agnostic core simulation",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bundle:net": "esbuild src/net/bundle-entry.ts --bundle --format=cjs --platform=browser --outfile=scripts/net/bundle.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
