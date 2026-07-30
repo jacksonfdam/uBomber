@@ -240,6 +240,10 @@ export default class Main extends Control {
     const view = new MatchView();
     view.startMatch(def, roster, seed, mode, localSlot);
     view.onFinished = (winner, state) => this.onMatchFinished(winner, state);
+    view.onSkip = () => {
+      this.afterMatch = this.campaign ? 'campaign-retry' : 'menu';
+      this.endMatch();
+    };
     if (mode === 'host') {
       view.onSnapshot = (state) => {
         void this.room?.send({ type: 'snapshot', state });

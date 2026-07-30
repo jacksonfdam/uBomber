@@ -104,6 +104,8 @@ export default class MatchView extends Node2D {
   onSnapshot: ((state: GameState) => void) | null = null;
   onLocalInput: ((input: PlayerInput) => void) | null = null;
   onFinished: ((winner: number | null, state: GameState) => void) | null = null;
+  /** Fired when the (dead) local player asks to skip the rest of the match. */
+  onSkip: (() => void) | null = null;
 
   private font: unknown = null;
 
@@ -174,6 +176,18 @@ export default class MatchView extends Node2D {
 
   _process(delta: number): void {
     if (!this.state) return;
+
+    // A dead local player can skip the spectator phase with the bomb key.
+    const local = this.state.players[this.localSlot];
+    if (
+      this.state.status === 'running' &&
+      local &&
+      !local.alive &&
+      Input.is_action_just_pressed('place_bomb')
+    ) {
+      this.onSkip?.();
+      return;
+    }
 
     if (this.mode === 'guest') {
       this.inputSendIn -= delta;
@@ -365,6 +379,19 @@ export default class MatchView extends Node2D {
         -1,
         12,
         p.alive ? gold : dead
+      );
+    }
+
+    const local = state.players[this.localSlot];
+    if (state.status === 'running' && local && !local.alive) {
+      this.draw_string(
+        this.font,
+        new Vector2(14, 790),
+        'OUT! SPACE: skip',
+        0,
+        -1,
+        9,
+        new Color(0.8, 0.5, 0.4, 1)
       );
     }
   }
