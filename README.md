@@ -14,7 +14,9 @@ backed by [Supabase](https://supabase.com) Realtime, hosted on
 ## Features
 
 - 💥 Classic bomberman rules: bombs, chain explosions, destructible crates,
-  power-ups (extra bomb, bigger flame, speed), last-one-standing wins
+  power-ups (extra bomb, bigger flame, speed), last-one-standing wins —
+  and **sudden death** walls that spiral in after 2 minutes, so no match
+  drags on forever
 - 🗺️ **10 Stockholm maps**: Gamla Stan, T-Centralen, Södermalm, Östermalm,
   Djurgården, Vasastan, Kungsholmen, Skansen, Slussen, Skärgården
 - 🤖 Bots with danger-aware pathfinding — they flee blasts, farm crates and

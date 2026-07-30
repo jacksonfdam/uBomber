@@ -32,9 +32,8 @@ setup (Supabase in Docker, GodotJS editor, web builds).
 - New Stockholm maps (see [docs/MAPS.md](docs/MAPS.md) — JSON only, no code)
 - Power-ups from Atomic Bomberman still on the roadmap: kick, punch,
   disease, trigger bombs
-- Sudden-death mode when the timer runs out
-- Sprite/tile art to replace the placeholder flat-color renderer
-- Sound effects and music
+- Smarter endgame bots (trapping/cornering instead of pure dodging)
+- An online leaderboard backed by Supabase (local rankings already exist)
 
 ## Pull requests
 
