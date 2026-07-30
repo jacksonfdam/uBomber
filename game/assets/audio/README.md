@@ -36,4 +36,5 @@ godot --headless --path game --import   # let the engine import the clips
 | `music/draw.ogg` | draw jingle (once) |
 
 Any WAV (sfx) / OGG (music) with these names works — royalty-free packs are
-a great option for builds you plan to publish.
+a great option for builds you plan to publish, or generate an original set
+with the AI prompts in [docs/AUDIO_PROMPTS.md](../../../docs/AUDIO_PROMPTS.md).
