@@ -77,6 +77,12 @@ tag injected via the preset's `html/head_include`, and
   colors and metadata. Format spec in [MAPS.md](MAPS.md).
 - **Rooms** are a single Postgres table with RLS enabled
   (`supabase/migrations/`).
+- **Scores** live inside the simulation (`PlayerState.score`) with blast
+  attribution via `FlameState.owner`, so multiplayer guests see them through
+  ordinary snapshots.
+- **Campaign progress and rankings** are local JSON under `user://`
+  (IndexedDB in web builds), managed by `game/src/godot/persist.ts`. An
+  online Supabase leaderboard is a natural follow-up but is not implemented.
 
 ## Platform notes
 

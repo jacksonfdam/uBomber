@@ -19,6 +19,12 @@ backed by [Supabase](https://supabase.com) Realtime, hosted on
   Djurgården, Vasastan, Kungsholmen, Skansen, Slussen, Skärgården
 - 🤖 Bots with danger-aware pathfinding — they flee blasts, farm crates and
   hunt you down
+- 🏆 **Campaign mode**: beat all 10 maps in order; progress is saved locally
+  so you can continue where you left off
+- 🎯 Arcade scoring (crates +10, power-ups +25, kills +200, win +500,
+  suicide −100) with a live per-player scoreboard during matches
+- 📊 Rankings screen: overall totals per player and the best score on each
+  map, persisted on your device
 - 🔗 Link-based multiplayer: create a room, share
   `https://…/game/?room=K7WQ2R`, friends drop straight into the lobby
   (up to 5 humans; bots fill the remaining slots)
