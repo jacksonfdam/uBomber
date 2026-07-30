@@ -9,7 +9,7 @@ config_version=5
 config/name="uBomber"
 config/description="Open-source Bomberman-style arcade game set in Stockholm. Play against the computer or invite up to 4 friends."
 run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.3")
+config/features=PackedStringArray("4.6")
 config/icon="res://icon.svg"
 
 [display]
