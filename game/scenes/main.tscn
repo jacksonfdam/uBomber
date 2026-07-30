@@ -101,7 +101,7 @@ theme_override_font_sizes/font_size = 9
 theme_override_colors/font_color = Color(0.8, 0.78, 0.72, 1)
 horizontal_alignment = 1
 autowrap_mode = 2
-text = "Bombs over Stockholm — up to 5 friends vs the computer"
+text = "Bombs over Stockholm — invite up to 4 friends vs the computer"
 
 [node name="NicknameEdit" type="LineEdit" parent="Menu"]
 layout_mode = 2
