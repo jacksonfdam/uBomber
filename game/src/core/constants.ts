@@ -26,6 +26,13 @@ export const POWERUP_DROP_CHANCE = 0.35;
 /** Match. */
 export const MATCH_TIME_SECONDS = 180;
 
+/** Arcade scoring. */
+export const SCORE_CRATE = 10;
+export const SCORE_POWERUP = 25;
+export const SCORE_KILL = 200;
+export const SCORE_WIN = 500;
+export const SCORE_SUICIDE = -100;
+
 /** Simulation runs at a fixed tick; snapshots broadcast at a lower rate. */
 export const TICK_RATE = 30;
 export const TICK_DT = 1 / TICK_RATE;

@@ -34,6 +34,8 @@ export interface PlayerState {
   flameRange: number;
   /** Bombs currently ticking that belong to this player. */
   activeBombs: number;
+  /** Arcade score earned this match (crates, power-ups, kills, win bonus). */
+  score: number;
 }
 
 export interface BombState {
@@ -51,6 +53,8 @@ export interface FlameState {
   y: number;
   /** Seconds of remaining burn. */
   ttl: number;
+  /** Slot of the player whose bomb produced this flame (score attribution). */
+  owner: number;
 }
 
 export interface PowerUpState {

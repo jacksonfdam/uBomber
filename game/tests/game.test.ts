@@ -4,6 +4,11 @@ import {
   BOMB_FUSE,
   FLAME_TTL,
   MATCH_TIME_SECONDS,
+  SCORE_CRATE,
+  SCORE_KILL,
+  SCORE_POWERUP,
+  SCORE_SUICIDE,
+  SCORE_WIN,
   SPEED_INCREMENT,
   TICK_DT,
 } from '../src/core/constants';
@@ -185,6 +190,49 @@ describe('power-ups', () => {
     state.powerups.push({ x: 2, y: 1, type: 'bomb' });
     run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
     expect(state.players[0].bombCap).toBe(2);
+  });
+});
+
+describe('scoring', () => {
+  it('awards crate points to the bomb owner', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.grid[1][3] = 'crate';
+    state.bombs.push({ id: 99, owner: 0, x: 1, y: 1, fuse: 0.01, range: 4 });
+    state.players[0].activeBombs = 1;
+    state.players[0].pos = { x: 7.5, y: 7.5 };
+
+    step(state, [], TICK_DT);
+    expect(state.players[0].score).toBe(SCORE_CRATE);
+  });
+
+  it('awards power-up points on pickup', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.powerups.push({ x: 2, y: 1, type: 'speed' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].score).toBe(SCORE_POWERUP);
+  });
+
+  it('awards a kill to the flame owner and the win bonus to the survivor', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    // Player 1's bomb kills player 0.
+    state.bombs.push({ id: 99, owner: 1, x: 1, y: 1, fuse: 0.01, range: 2 });
+    state.players[1].activeBombs = 1;
+    state.players[1].pos = { x: 13.5, y: 11.5 };
+
+    step(state, [], TICK_DT);
+
+    expect(state.players[0].alive).toBe(false);
+    expect(state.players[1].score).toBe(SCORE_KILL + SCORE_WIN);
+  });
+
+  it('penalizes dying in your own blast', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: true }), TICK_DT);
+    run(state, [], BOMB_FUSE);
+
+    expect(state.players[0].alive).toBe(false);
+    expect(state.players[0].score).toBe(SCORE_SUICIDE);
+    expect(state.players[1].score).toBe(SCORE_WIN);
   });
 });
 

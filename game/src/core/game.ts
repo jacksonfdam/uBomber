@@ -11,6 +11,11 @@ import {
   MAX_SPEED,
   PLAYER_RADIUS,
   POWERUP_DROP_CHANCE,
+  SCORE_CRATE,
+  SCORE_KILL,
+  SCORE_POWERUP,
+  SCORE_SUICIDE,
+  SCORE_WIN,
   SPEED_INCREMENT,
   TILE_COLS,
   TILE_ROWS,
@@ -58,6 +63,7 @@ export function createGame(
     bombCap: BASE_BOMB_CAP,
     flameRange: BASE_FLAME_RANGE,
     activeBombs: 0,
+    score: 0,
   }));
 
   return {
@@ -206,6 +212,7 @@ function pickUpPowerUp(state: GameState, p: PlayerState): void {
   if (idx === -1) return;
   const [taken] = state.powerups.splice(idx, 1);
   applyPowerUp(p, taken.type);
+  p.score += SCORE_POWERUP;
 }
 
 function applyPowerUp(p: PlayerState, type: PowerUpType): void {
@@ -229,14 +236,14 @@ function updateBombs(state: GameState, dt: number): void {
   if (queue.length === 0) return;
 
   const exploded = new Set<number>();
-  const flameTiles: Vec2[] = [];
-  const crushedCrates: Vec2[] = [];
+  const flameTiles: Array<Vec2 & { owner: number }> = [];
+  const crushedCrates: Array<Vec2 & { owner: number }> = [];
 
   while (queue.length > 0) {
     const bomb = queue.shift()!;
     if (exploded.has(bomb.id)) continue;
     exploded.add(bomb.id);
-    flameTiles.push({ x: bomb.x, y: bomb.y });
+    flameTiles.push({ x: bomb.x, y: bomb.y, owner: bomb.owner });
 
     for (const dir of DIRS) {
       for (let r = 1; r <= bomb.range; r++) {
@@ -245,8 +252,8 @@ function updateBombs(state: GameState, dt: number): void {
         if (!isInside(x, y) || state.grid[y][x] === 'wall') break;
 
         if (state.grid[y][x] === 'crate') {
-          crushedCrates.push({ x, y });
-          flameTiles.push({ x, y });
+          crushedCrates.push({ x, y, owner: bomb.owner });
+          flameTiles.push({ x, y, owner: bomb.owner });
           break;
         }
 
@@ -254,18 +261,18 @@ function updateBombs(state: GameState, dt: number): void {
         if (other && !exploded.has(other.id)) {
           other.fuse = 0;
           queue.push(other);
-          flameTiles.push({ x, y });
+          flameTiles.push({ x, y, owner: bomb.owner });
           break;
         }
 
         const powerup = state.powerups.findIndex((u) => u.x === x && u.y === y);
         if (powerup !== -1) {
           state.powerups.splice(powerup, 1);
-          flameTiles.push({ x, y });
+          flameTiles.push({ x, y, owner: bomb.owner });
           break;
         }
 
-        flameTiles.push({ x, y });
+        flameTiles.push({ x, y, owner: bomb.owner });
       }
     }
   }
@@ -279,13 +286,15 @@ function updateBombs(state: GameState, dt: number): void {
   state.bombs = state.bombs.filter((b) => !exploded.has(b.id));
 
   for (const t of flameTiles) {
-    state.flames.push({ x: t.x, y: t.y, ttl: FLAME_TTL });
+    state.flames.push({ x: t.x, y: t.y, ttl: FLAME_TTL, owner: t.owner });
   }
 
   // Crates burn down after flames are laid so a crate's own power-up is not
   // consumed by the blast that revealed it.
   for (const c of crushedCrates) {
     state.grid[c.y][c.x] = 'floor';
+    const owner = state.players[c.owner];
+    if (owner) owner.score += SCORE_CRATE;
     if (rand(state) < POWERUP_DROP_CHANCE) {
       state.powerups.push({ x: c.x, y: c.y, type: rollPowerUp(state) });
     }
@@ -308,9 +317,12 @@ function killPlayersInFlames(state: GameState): void {
   for (const p of state.players) {
     if (!p.alive) continue;
     const here = tileOf(p.pos);
-    if (flameAt(state, here.x, here.y)) {
-      p.alive = false;
-    }
+    const flame = state.flames.find((f) => f.x === here.x && f.y === here.y);
+    if (!flame) continue;
+    p.alive = false;
+    const killer = state.players[flame.owner];
+    if (!killer) continue;
+    killer.score += flame.owner === p.id ? SCORE_SUICIDE : SCORE_KILL;
   }
 }
 
@@ -319,6 +331,9 @@ function resolveOutcome(state: GameState, _dt: number): void {
   if (alive.length <= 1) {
     state.status = 'finished';
     state.winner = alive.length === 1 ? alive[0].id : null;
+    if (state.winner !== null) {
+      state.players[state.winner].score += SCORE_WIN;
+    }
     return;
   }
   if (state.time >= MATCH_TIME_SECONDS) {
