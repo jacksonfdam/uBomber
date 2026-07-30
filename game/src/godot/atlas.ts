@@ -49,7 +49,8 @@ export const SPR = {
 
 export type Facing = 'down' | 'up' | 'left' | 'right';
 
-export const CHAR_VARIANTS = 4;
+/** One hooded-goblin recolor per player slot (robe = PLAYER_COLORS[slot]). */
+export const CHAR_VARIANTS = 6;
 
 /** Bomb fuse animation, 6 frames. */
 export function bombFrame(index: number): Region {

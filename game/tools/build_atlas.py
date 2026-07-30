@@ -5,12 +5,16 @@ Source: assets/third_party/bomb_party_v4.png (CC-BY 3.0, see ATTRIBUTION.md).
 Tiles that get tinted by map themes at runtime (floor, wall, crate, bush) are
 neutralized to grayscale here so a plain modulate reproduces the theme color.
 
-Atlas layout (16px cells, 16 cols x 7 rows):
+Atlas layout (16px cells, 16 cols x 9 rows):
   row 0: floorA floorB wall crate shadow ring panel bolt bush
   row 1: flCenter flH flTipL flTipR flV flTipU flTipD flBall flBurst
   row 2: bomb0..bomb5
-  row 3-6: character variants 0-3; cols 0-3 down, 4-7 right, 8-9 up,
+  row 3-8: character variants 0-5; cols 0-3 down, 4-7 right, 8-9 up,
            10-13 left (right frames flipped)
+
+Characters are all the same chibi hooded goblin (matching the splash art):
+the source's purple-robed goblin recolored per player slot, so variant N
+wears PLAYER_COLORS[N] from match_view.ts.
 
 Usage: python3 tools/build_atlas.py   (from the game/ directory)
 """
@@ -137,9 +141,38 @@ def bolt() -> Image.Image:
     return out
 
 
+# One robe color per player slot; must match PLAYER_COLORS in match_view.ts.
+ROBE_TARGETS = ['#4f9dde', '#e2574c', '#57b26a', '#e0b34c', '#9a6dd7', '#5bc8c4']
+
+# Brightest robe tone in the source goblin (blue channel of #6740b3).
+ROBE_PEAK = 179
+
+
+def recolor_goblin(img: Image.Image, target_hex: str) -> Image.Image:
+    """Repaints the purple robe with the target color, keeping the shading
+    ramp; green skin, face band and outlines are left untouched."""
+    target = tuple(int(target_hex.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
+    out = img.copy()
+    for y in range(16):
+        for x in range(16):
+            r, g, b, a = out.getpixel((x, y))
+            if a == 0 or not (b > g + 12 and r > g - 8):
+                continue
+            # 1.25 puts the source's base tone at exactly the target color,
+            # leaving the highlight a step brighter.
+            shade = min(1.6, (b / ROBE_PEAK) * 1.25)
+            out.putpixel((x, y), (
+                min(255, round(target[0] * shade)),
+                min(255, round(target[1] * shade)),
+                min(255, round(target[2] * shade)),
+                a,
+            ))
+    return out
+
+
 def main() -> None:
     src = Image.open(SOURCE).convert('RGBA')
-    atlas = Image.new('RGBA', (16 * CELL, 7 * CELL), (0, 0, 0, 0))
+    atlas = Image.new('RGBA', (16 * CELL, 9 * CELL), (0, 0, 0, 0))
 
     def put(img: Image.Image, c: int, r: int) -> None:
         atlas.alpha_composite(img, (c * CELL, r * CELL))
@@ -170,13 +203,16 @@ def main() -> None:
     for i in range(6):
         put(cell(src, 4 + i, 18), i, 2)
 
-    # rows 3-6: characters (source rows 14-17)
-    for variant in range(4):
-        sr = 14 + variant
+    # rows 3-8: the hooded goblin (source row 16) recolored per player slot
+    for variant, robe in enumerate(ROBE_TARGETS):
         for frame in range(10):
-            put(cell(src, frame, sr), frame, 3 + variant)
+            put(recolor_goblin(cell(src, frame, 16), robe), frame, 3 + variant)
         for i in range(4):  # left-facing = flipped right-facing
-            put(cell(src, 4 + i, sr).transpose(Image.FLIP_LEFT_RIGHT), 10 + i, 3 + variant)
+            put(
+                recolor_goblin(cell(src, 4 + i, 16), robe).transpose(Image.FLIP_LEFT_RIGHT),
+                10 + i,
+                3 + variant,
+            )
 
     atlas.save(OUT)
     print(f'wrote {OUT} ({atlas.width}x{atlas.height})')
