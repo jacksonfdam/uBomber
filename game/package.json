@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bundle:net": "esbuild src/net/bundle-entry.ts --bundle --format=cjs --platform=browser --outfile=scripts/net/bundle.js"
+    "bundle:net": "esbuild src/net/bundle-entry.ts --bundle --format=iife --global-name=UBomberNet --platform=browser --outfile=../web/public/game/net-bundle.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0"

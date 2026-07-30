@@ -2,27 +2,26 @@
  * Bridges Godot-side scripts to the bundled network layer.
  *
  * GodotJS cannot resolve npm packages at runtime, so `npm run bundle:net`
- * packs src/net (including @supabase/supabase-js) into scripts/net/bundle.js.
- * This module requires that bundle at runtime while borrowing its types from
- * the source entry point, so callers keep full type safety.
+ * packs src/net (including @supabase/supabase-js) into an IIFE that assigns
+ * itself to `globalThis.UBomberNet`. The web export loads it via a <script>
+ * tag injected through the export preset's html/head_include, so the bundle
+ * ships next to the exported game instead of inside the pck.
  *
  * Multiplayer needs browser APIs (fetch, WebSocket) and is therefore only
  * available in web exports; solo vs bots works everywhere.
  */
 import type * as NetModule from '../net/bundle-entry';
 
-declare const require: (id: string) => any;
-
-let cached: typeof NetModule | null = null;
-
-export function net(): typeof NetModule {
-  if (!cached) {
-    cached = require('../net/bundle') as typeof NetModule;
-  }
-  return cached;
+export function net(): typeof NetModule | null {
+  const bundle = (globalThis as { UBomberNet?: typeof NetModule }).UBomberNet;
+  return bundle ?? null;
 }
 
 export function isNetAvailable(): boolean {
   const g = globalThis as { fetch?: unknown; WebSocket?: unknown };
-  return typeof g.fetch === 'function' && typeof g.WebSocket === 'function';
+  return (
+    typeof g.fetch === 'function' &&
+    typeof g.WebSocket === 'function' &&
+    net() !== null
+  );
 }
