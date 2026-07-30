@@ -87,6 +87,32 @@ describe('BotController', () => {
     expect(danger[now.y][now.x]).toBe(Infinity);
   });
 
+  it.each([42, 7, 123, 999])(
+    'does not blow itself up in the opening (seed %i)',
+    (seed) => {
+      const state = createGame(
+        loadMap('gamla-stan'),
+        [
+          { kind: 'bot', name: 'A' },
+          { kind: 'bot', name: 'B' },
+          { kind: 'bot', name: 'C' },
+          { kind: 'bot', name: 'D' },
+        ],
+        seed
+      );
+      const bots = state.players.map((p) => new BotController(p.id));
+
+      const ticks = Math.round(10 / TICK_DT);
+      for (let i = 0; i < ticks && state.status === 'running'; i++) {
+        const inputs = bots.map((b) => b.update(state, TICK_DT));
+        step(state, inputs, TICK_DT);
+      }
+
+      const alive = state.players.filter((p) => p.alive).length;
+      expect(alive, `alive after 10s (seed ${seed})`).toBeGreaterThanOrEqual(3);
+    }
+  );
+
   it('plays a full match without stalling: bombs are placed and crates fall', () => {
     const state = createGame(
       loadMap('gamla-stan'),

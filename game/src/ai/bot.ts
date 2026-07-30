@@ -35,9 +35,20 @@ export class BotController {
     if (!me || !me.alive || state.status !== 'running') return IDLE_INPUT;
 
     this.replanIn -= dt;
-    if (this.replanIn <= 0 || this.path.length === 0) {
+    const danger = dangerMap(state);
+    const here = tileOf(me.pos);
+
+    // React immediately when the ground under us — or the very next step of
+    // the current path — turns dangerous; the fixed cadence is only for calm
+    // decisions. Slow reactions here were the main cause of bot suicides.
+    const next = this.path[0];
+    const urgent =
+      danger[here.y][here.x] !== Infinity ||
+      (next !== undefined && danger[next.y][next.x] < 0.6);
+
+    if (urgent || this.replanIn <= 0 || this.path.length === 0) {
       this.replanIn = REPLAN_INTERVAL;
-      this.plan(state, me);
+      this.plan(state, me, danger, here);
     }
 
     const bomb = this.wantBomb;
@@ -45,35 +56,32 @@ export class BotController {
     return { ...this.followPath(me), bomb };
   }
 
-  private plan(state: GameState, me: PlayerState): void {
-    const danger = dangerMap(state);
-    const here = tileOf(me.pos);
-
+  private plan(
+    state: GameState,
+    me: PlayerState,
+    danger: number[][],
+    here: Vec2
+  ): void {
     if (danger[here.y][here.x] !== Infinity) {
-      this.path = fleePath(state, here, danger);
+      this.path = fleePath(state, here, danger, me.speed);
       return;
     }
 
-    if (this.shouldBomb(state, me, here, danger)) {
+    if (this.shouldBomb(state, me, here)) {
       this.wantBomb = true;
       const withBomb = dangerMap(state, {
         x: here.x,
         y: here.y,
         range: me.flameRange,
       });
-      this.path = fleePath(state, here, withBomb);
+      this.path = fleePath(state, here, withBomb, me.speed);
       return;
     }
 
     this.path = huntPath(state, me, here, danger);
   }
 
-  private shouldBomb(
-    state: GameState,
-    me: PlayerState,
-    here: Vec2,
-    danger: number[][]
-  ): boolean {
+  private shouldBomb(state: GameState, me: PlayerState, here: Vec2): boolean {
     if (me.activeBombs >= me.bombCap) return false;
     if (bombAt(state, here.x, here.y)) return false;
     if (!blastHitsTarget(state, me, here)) return false;
@@ -82,7 +90,10 @@ export class BotController {
       y: here.y,
       range: me.flameRange,
     });
-    return fleePath(state, here, withBomb).length > 0;
+    const escape = fleePath(state, here, withBomb, me.speed);
+    if (escape.length === 0) return false;
+    // Only commit if the escape fits comfortably inside the fuse.
+    return escape.length / me.speed <= BOMB_FUSE - 0.5;
   }
 
   private followPath(me: PlayerState): PlayerInput {
@@ -191,12 +202,28 @@ function walkable(state: GameState, x: number, y: number, from: Vec2): boolean {
   return true;
 }
 
-/** BFS to the nearest tile that is safe now and stays safe long enough to
- * reach it. Danger tiles can be crossed if the blast is still far away. */
-function fleePath(state: GameState, from: Vec2, danger: number[][]): Vec2[] {
-  const found = bfs(state, from, (x, y, dist) => {
-    return danger[y][x] === Infinity && dist <= 8;
-  });
+/**
+ * BFS to the nearest fully safe tile. Danger tiles may be crossed only when
+ * we would be through them well before (or well after) their blast window —
+ * walking into a tile as it ignites was the main way bots killed themselves.
+ */
+function fleePath(
+  state: GameState,
+  from: Vec2,
+  danger: number[][],
+  speed: number
+): Vec2[] {
+  const found = bfs(
+    state,
+    from,
+    (x, y, dist) => danger[y][x] === Infinity && dist <= 10,
+    (x, y, dist) => {
+      const blastAt = danger[y][x];
+      if (blastAt === Infinity) return false;
+      const arrival = dist / speed;
+      return arrival > blastAt - 0.35 && arrival < blastAt + FLAME_TTL + 0.25;
+    }
+  );
   return found ?? [];
 }
 
@@ -206,18 +233,25 @@ function huntPath(
   from: Vec2,
   danger: number[][]
 ): Vec2[] {
+  // While hunting there is no urgency: never route through a threatened tile.
+  const avoidDanger = (x: number, y: number) => danger[y][x] !== Infinity;
+
   // Priority 1: reachable power-up.
-  const toPowerUp = bfs(state, from, (x, y) => {
-    if (danger[y][x] !== Infinity) return false;
-    return state.powerups.some((u) => u.x === x && u.y === y);
-  });
+  const toPowerUp = bfs(
+    state,
+    from,
+    (x, y) => state.powerups.some((u) => u.x === x && u.y === y),
+    avoidDanger
+  );
   if (toPowerUp) return toPowerUp;
 
   // Priority 2: a safe tile next to a crate (so the next plan drops a bomb).
-  const toCrate = bfs(state, from, (x, y) => {
-    if (danger[y][x] !== Infinity) return false;
-    return DIRS.some((d) => state.grid[y + d.y]?.[x + d.x] === 'crate');
-  });
+  const toCrate = bfs(
+    state,
+    from,
+    (x, y) => DIRS.some((d) => state.grid[y + d.y]?.[x + d.x] === 'crate'),
+    avoidDanger
+  );
   if (toCrate) return toCrate;
 
   // Priority 3: close in on the nearest living enemy.
@@ -228,21 +262,26 @@ function huntPath(
       return `${t.x},${t.y}`;
     })
   );
-  const toEnemy = bfs(state, from, (x, y) => {
-    if (danger[y][x] !== Infinity) return false;
-    return DIRS.some((d) => enemyTiles.has(`${x + d.x},${y + d.y}`));
-  });
+  const toEnemy = bfs(
+    state,
+    from,
+    (x, y) => DIRS.some((d) => enemyTiles.has(`${x + d.x},${y + d.y}`)),
+    avoidDanger
+  );
   return toEnemy ?? [];
 }
 
 /**
  * Breadth-first search over walkable tiles. Returns the path (excluding the
- * start tile) to the first tile matching `goal`, or null.
+ * start tile) to the first tile matching `goal`, or null. `blocked` vetoes
+ * entering a tile at a given walking distance (used for timing-aware danger
+ * avoidance).
  */
 function bfs(
   state: GameState,
   from: Vec2,
-  goal: (x: number, y: number, dist: number) => boolean
+  goal: (x: number, y: number, dist: number) => boolean,
+  blocked?: (x: number, y: number, dist: number) => boolean
 ): Vec2[] | null {
   const key = (x: number, y: number) => y * TILE_COLS + x;
   const cameFrom = new Map<number, number>();
@@ -261,6 +300,7 @@ function bfs(
       const ny = cur.y + d.y;
       const k = key(nx, ny);
       if (seen.has(k) || !walkable(state, nx, ny, from)) continue;
+      if (blocked?.(nx, ny, cur.dist + 1)) continue;
       seen.add(k);
       cameFrom.set(k, key(cur.x, cur.y));
       queue.push({ x: nx, y: ny, dist: cur.dist + 1 });
