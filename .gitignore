@@ -3,6 +3,14 @@ node_modules/
 
 # Build output
 game/.godot/
+
+# Audio assets are bring-your-own (commercial-game sound packs cannot be
+# redistributed here) — see game/assets/audio/README.md
+game/assets/audio/*
+!game/assets/audio/README.md
+
+# Local sound pack folders
+Bomberman*Sound*Pack*/
 web/public/game/*
 !web/public/game/README.md
 
