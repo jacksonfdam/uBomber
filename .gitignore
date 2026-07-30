@@ -9,8 +9,9 @@ game/.godot/
 game/assets/audio/*
 !game/assets/audio/README.md
 
-# Local sound pack folders
+# Local sound pack folders and AI-generation workspaces
 Bomberman*Sound*Pack*/
+ElevenLabs*/
 web/public/game/*
 !web/public/game/README.md
 
