@@ -4,8 +4,8 @@
     "lib": ["ES2021", "DOM"],
     "module": "CommonJS",
     "moduleResolution": "node",
-    "rootDir": "src",
-    "outDir": "scripts",
+    "rootDir": ".",
+    "outDir": "./.godot/GodotJS",
     "strict": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
@@ -14,5 +14,5 @@
     "types": []
   },
   "include": ["src/**/*.ts", "typings/**/*.d.ts"],
-  "exclude": ["node_modules", "scripts"]
+  "exclude": ["node_modules", "tests", ".godot"]
 }
