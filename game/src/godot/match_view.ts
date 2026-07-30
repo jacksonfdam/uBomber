@@ -1,5 +1,6 @@
 import { Color, Input, Node2D, Rect2, Vector2 } from 'godot';
 import { BotController } from '../ai/bot';
+import { AudioBank } from './audio';
 import { SNAPSHOT_RATE, TICK_DT, TILE_COLS, TILE_ROWS } from '../core/constants';
 import { createGame, step } from '../core/game';
 import type {
@@ -44,6 +45,9 @@ export default class MatchView extends Node2D {
   /** Latest input per remote human slot (host mode). */
   private remoteInputs = new Map<number, PlayerInput>();
 
+  /** Previous-frame tallies used to fire sound effects on state changes. */
+  private heard = { bombs: 0, flames: 0, powerups: 0, alive: 0 };
+
   onSnapshot: ((state: GameState) => void) | null = null;
   onLocalInput: ((input: PlayerInput) => void) | null = null;
   onFinished: ((winner: number | null, state: GameState) => void) | null = null;
@@ -67,11 +71,18 @@ export default class MatchView extends Node2D {
     }
     this.finishedNotified = false;
     this.accumulator = 0;
+    this.heard = {
+      bombs: 0,
+      flames: 0,
+      powerups: 0,
+      alive: this.state.players.length,
+    };
   }
 
   applySnapshot(state: GameState): void {
     if (this.mode !== 'guest') return;
     this.state = state;
+    this.playStateSounds(state);
     this.queue_redraw();
   }
 
@@ -128,7 +139,29 @@ export default class MatchView extends Node2D {
     });
 
     step(state, inputs, TICK_DT);
+    this.playStateSounds(state);
     if (state.status !== 'running') this.notifyFinished();
+  }
+
+  /** Fires sfx by diffing entity tallies, so it works identically for the
+   * local simulation and for host snapshots on guests. */
+  private playStateSounds(state: GameState): void {
+    const alive = state.players.filter((p) => p.alive).length;
+    const exploded = this.heard.flames === 0 && state.flames.length > 0;
+
+    if (state.bombs.length > this.heard.bombs) AudioBank.playSfx('bomb_place');
+    if (exploded) AudioBank.playSfx('explosion');
+    if (alive < this.heard.alive) AudioBank.playSfx('death');
+    if (state.powerups.length < this.heard.powerups && !exploded) {
+      AudioBank.playSfx('item');
+    }
+
+    this.heard = {
+      bombs: state.bombs.length,
+      flames: state.flames.length,
+      powerups: state.powerups.length,
+      alive,
+    };
   }
 
   private notifyFinished(): void {

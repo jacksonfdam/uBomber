@@ -43,8 +43,11 @@ declare module 'godot' {
     [key: string]: any;
   }
 
+  export class AudioStreamPlayer extends Node {}
+
   export const Input: any;
   export const FileAccess: any;
+  export const ResourceLoader: any;
   export const DisplayServer: any;
   export const Engine: any;
   export const OS: any;

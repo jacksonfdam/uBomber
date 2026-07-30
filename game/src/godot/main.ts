@@ -3,6 +3,7 @@ import { MAX_SLOTS } from '../core/constants';
 import type { GameState, PlayerInput, RosterEntry } from '../core/types';
 import type { LobbyMember, RoomClient } from '../net/room';
 import type { RoomMsg, StartMsg } from '../net/protocol';
+import { AudioBank } from './audio';
 import { loadMapDef, loadMapIds } from './maps';
 import MatchView from './match_view';
 import { isNetAvailable, net } from './net_bridge';
@@ -21,6 +22,7 @@ export default class Main extends Control {
   private mapIds: string[] = [];
 
   _ready(): void {
+    AudioBank.init(this);
     this.mapIds = loadMapIds();
     const mapOption = this.node<OptionButton>('Menu/MapOption');
     for (const id of this.mapIds) {
@@ -212,6 +214,8 @@ export default class Main extends Control {
     this.node<Label>('HudLabel').text =
       `${def.name} — ${def.district}. Arrows/WASD to move, Space to bomb.`;
     this.node<Label>('HudLabel').visible = true;
+    AudioBank.playMusic('battle');
+    AudioBank.playSfx('start');
   }
 
   private onMatchFinished(winner: number | null, state: GameState): void {
@@ -223,6 +227,8 @@ export default class Main extends Control {
       winner === null
         ? 'Draw! Returning to menu…'
         : `${state.players[winner].name} wins! Returning to menu…`;
+    AudioBank.playMusic(winner === null ? 'draw' : 'victory');
+    if (winner !== null) AudioBank.playSfx('winner');
     this.get_tree()
       .create_timer(4.0)
       .timeout.connect(Callable.create(this, () => this.endMatch()));
@@ -249,11 +255,13 @@ export default class Main extends Control {
     this.setStatus('');
     // Keyboard-first: Enter starts a solo match right away.
     this.node<Button>('Menu/PlaySolo').grab_focus();
+    AudioBank.playMusic('title');
   }
 
   private showLobby(code: string, isHost: boolean): void {
     this.node<Control>('Menu').visible = false;
     this.node<Control>('Lobby').visible = true;
+    AudioBank.playMusic('lobby');
     this.node<Label>('Lobby/CodeLabel').text = `Room code: ${code}`;
     this.node<Label>('Lobby/InviteLabel').text =
       `Invite link: ${this.origin()}/game/?room=${code}`;
@@ -274,7 +282,12 @@ export default class Main extends Control {
   /** GodotJS signals reject bare JS functions; they must be wrapped in a
    * Callable bound to a Godot object. */
   private onPressed(path: string, fn: () => void): void {
-    this.node<Button>(path).pressed.connect(Callable.create(this, fn));
+    this.node<Button>(path).pressed.connect(
+      Callable.create(this, () => {
+        AudioBank.playSfx('menu_accept');
+        fn();
+      })
+    );
   }
 
   private nickname(): string {
