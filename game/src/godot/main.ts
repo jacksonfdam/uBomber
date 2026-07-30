@@ -1,4 +1,4 @@
-import { Button, Control, Label, LineEdit, OptionButton } from 'godot';
+import { Button, Callable, Control, Label, LineEdit, OptionButton } from 'godot';
 import { MAX_SLOTS } from '../core/constants';
 import type { GameState, PlayerInput, RosterEntry } from '../core/types';
 import type { LobbyMember, RoomClient } from '../net/room';
@@ -28,17 +28,11 @@ export default class Main extends Control {
     }
     mapOption.select(0);
 
-    this.node<Button>('Menu/PlaySolo').pressed.connect(() => this.startSolo());
-    this.node<Button>('Menu/CreateRoom').pressed.connect(() =>
-      this.createRoom()
-    );
-    this.node<Button>('Menu/JoinRoom').pressed.connect(() => this.joinRoom());
-    this.node<Button>('Lobby/StartButton').pressed.connect(() =>
-      this.startOnlineMatch()
-    );
-    this.node<Button>('Lobby/LeaveButton').pressed.connect(() =>
-      this.leaveRoom()
-    );
+    this.onPressed('Menu/PlaySolo', () => this.startSolo());
+    this.onPressed('Menu/CreateRoom', () => void this.createRoom());
+    this.onPressed('Menu/JoinRoom', () => void this.joinRoom());
+    this.onPressed('Lobby/StartButton', () => this.startOnlineMatch());
+    this.onPressed('Lobby/LeaveButton', () => void this.leaveRoom());
 
     // Invite links (/game/?room=CODE) drop straight into the join flow.
     const invited = this.roomCodeFromLocation();
@@ -93,18 +87,19 @@ export default class Main extends Control {
   }
 
   private async connect(): Promise<RoomClient | null> {
-    if (!isNetAvailable()) {
+    const netMod = net();
+    if (!netMod || !isNetAvailable()) {
       this.setStatus('Online play needs the web build (see docs).');
       return null;
     }
     if (this.room) return this.room;
 
-    const config = await net().loadNetConfig('');
+    const config = await netMod.loadNetConfig('');
     if (!config) {
       this.setStatus('Missing /config.json: Supabase is not configured.');
       return null;
     }
-    this.room = new (net().RoomClient)(config, {
+    this.room = new netMod.RoomClient(config, {
       onLobbyChange: (members) => this.refreshLobby(members),
       onMessage: (msg) => this.handleMessage(msg),
     });
@@ -113,7 +108,8 @@ export default class Main extends Control {
 
   private startOnlineMatch(): void {
     const room = this.room;
-    if (!room || !room.isHost) return;
+    const netMod = net();
+    if (!room || !room.isHost || !netMod) return;
 
     const humans = this.members;
     const roster: StartMsg['roster'] = humans.map((m) => ({
@@ -130,7 +126,7 @@ export default class Main extends Control {
 
     const start: StartMsg = {
       type: 'start',
-      version: net().PROTOCOL_VERSION,
+      version: netMod.PROTOCOL_VERSION,
       mapId: this.selectedMapId(),
       seed: this.newSeed(),
       roster,
@@ -227,7 +223,9 @@ export default class Main extends Control {
       winner === null
         ? 'Draw! Returning to menu…'
         : `${state.players[winner].name} wins! Returning to menu…`;
-    this.get_tree().create_timer(4.0).timeout.connect(() => this.endMatch());
+    this.get_tree()
+      .create_timer(4.0)
+      .timeout.connect(Callable.create(this, () => this.endMatch()));
   }
 
   private endMatch(): void {
@@ -249,6 +247,8 @@ export default class Main extends Control {
     this.node<Control>('Lobby').visible = false;
     this.node<Label>('HudLabel').visible = false;
     this.setStatus('');
+    // Keyboard-first: Enter starts a solo match right away.
+    this.node<Button>('Menu/PlaySolo').grab_focus();
   }
 
   private showLobby(code: string, isHost: boolean): void {
@@ -269,6 +269,12 @@ export default class Main extends Control {
 
   private node<T = any>(path: string): T {
     return this.get_node(path) as T;
+  }
+
+  /** GodotJS signals reject bare JS functions; they must be wrapped in a
+   * Callable bound to a Godot object. */
+  private onPressed(path: string, fn: () => void): void {
+    this.node<Button>(path).pressed.connect(Callable.create(this, fn));
   }
 
   private nickname(): string {
@@ -292,7 +298,6 @@ export default class Main extends Control {
 
   private roomCodeFromLocation(): string | null {
     const loc = (globalThis as { location?: { href?: string } }).location;
-    if (!loc?.href || !isNetAvailable()) return null;
-    return net().roomCodeFromUrl(loc.href);
+    return (loc?.href && net()?.roomCodeFromUrl(loc.href)) || null;
   }
 }

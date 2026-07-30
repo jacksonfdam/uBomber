@@ -23,6 +23,10 @@ declare module 'godot' {
   export class OptionButton extends Button {}
   export class VBoxContainer extends Control {}
 
+  export class Callable {
+    static create(target: any, fn?: (...args: any[]) => void): Callable;
+    [key: string]: any;
+  }
   export class Color {
     constructor(...args: any[]);
     [key: string]: any;
