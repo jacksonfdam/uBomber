@@ -211,6 +211,7 @@ export default class Main extends Control {
     this.node('MatchContainer').add_child(view);
     this.node<Control>('Menu').visible = false;
     this.node<Control>('Lobby').visible = false;
+    this.node<Control>('MenuBackground').visible = false;
     this.node<Label>('HudLabel').text =
       `${def.name} — ${def.district}. Arrows/WASD to move, Space to bomb.`;
     this.node<Label>('HudLabel').visible = true;
@@ -251,6 +252,7 @@ export default class Main extends Control {
   private showMenu(): void {
     this.node<Control>('Menu').visible = true;
     this.node<Control>('Lobby').visible = false;
+    this.node<Control>('MenuBackground').visible = true;
     this.node<Label>('HudLabel').visible = false;
     this.setStatus('');
     // Keyboard-first: Enter starts a solo match right away.
