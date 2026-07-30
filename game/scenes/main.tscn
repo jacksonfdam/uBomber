@@ -115,6 +115,10 @@ layout_mode = 2
 layout_mode = 2
 text = "Play vs computer"
 
+[node name="CampaignButton" type="Button" parent="Menu"]
+layout_mode = 2
+text = "Campaign  0/10"
+
 [node name="CreateRoom" type="Button" parent="Menu"]
 layout_mode = 2
 text = "Create online room"
@@ -127,6 +131,10 @@ max_length = 6
 [node name="JoinRoom" type="Button" parent="Menu"]
 layout_mode = 2
 text = "Join room"
+
+[node name="RankingsButton" type="Button" parent="Menu"]
+layout_mode = 2
+text = "Rankings"
 
 [node name="Status" type="Label" parent="Menu"]
 layout_mode = 2
@@ -193,6 +201,72 @@ text = "Start match"
 [node name="LeaveButton" type="Button" parent="Lobby"]
 layout_mode = 2
 text = "Leave room"
+
+[node name="RankingsPanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -300.0
+offset_right = 360.0
+offset_bottom = 300.0
+theme_override_styles/panel = SubResource("2_panel")
+
+[node name="Rankings" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -330.0
+offset_top = -280.0
+offset_right = 330.0
+offset_bottom = 280.0
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="RankTitle" type="Label" parent="Rankings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.84, 0.35, 1)
+horizontal_alignment = 1
+text = "Rankings"
+
+[node name="OverallTitle" type="Label" parent="Rankings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+horizontal_alignment = 1
+text = "Overall"
+
+[node name="OverallLabel" type="Label" parent="Rankings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 9
+horizontal_alignment = 1
+text = ""
+
+[node name="PerMapTitle" type="Label" parent="Rankings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+horizontal_alignment = 1
+text = "Best per map"
+
+[node name="PerMapLabel" type="Label" parent="Rankings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 9
+horizontal_alignment = 1
+text = ""
+
+[node name="BackButton" type="Button" parent="Rankings"]
+layout_mode = 2
+text = "Back"
 
 [node name="HudLabel" type="Label" parent="."]
 visible = false

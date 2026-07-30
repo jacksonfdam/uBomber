@@ -7,6 +7,16 @@ import { AudioBank } from './audio';
 import { loadMapDef, loadMapIds } from './maps';
 import MatchView from './match_view';
 import { isNetAvailable, net } from './net_bridge';
+import {
+  bestForMap,
+  loadCampaign,
+  loadRankings,
+  overallRanking,
+  recordResults,
+  resetCampaign,
+  saveCampaign,
+  type CampaignProgress,
+} from './persist';
 
 /** Total combatants when humans alone don't fill the arena. */
 const TARGET_COMBATANTS = 4;
@@ -21,6 +31,14 @@ export default class Main extends Control {
   private members: LobbyMember[] = [];
   private mapIds: string[] = [];
 
+  /** Campaign state: beat every map, in catalog order, progress persisted. */
+  private campaign = false;
+  private campaignMapId: string | null = null;
+  private progress: CampaignProgress = { completed: [], totalScore: 0 };
+  /** What endMatch() should do after the results screen. */
+  private afterMatch: 'menu' | 'campaign-next' | 'campaign-retry' = 'menu';
+  private currentMapId: string | null = null;
+
   _ready(): void {
     AudioBank.init(this);
     this.mapIds = loadMapIds();
@@ -30,9 +48,14 @@ export default class Main extends Control {
     }
     mapOption.select(0);
 
+    this.progress = loadCampaign();
+
     this.onPressed('Menu/PlaySolo', () => this.startSolo());
+    this.onPressed('Menu/CampaignButton', () => this.startCampaign());
     this.onPressed('Menu/CreateRoom', () => void this.createRoom());
     this.onPressed('Menu/JoinRoom', () => void this.joinRoom());
+    this.onPressed('Menu/RankingsButton', () => this.showRankings());
+    this.onPressed('Rankings/BackButton', () => this.showMenu());
     this.onPressed('Lobby/StartButton', () => this.startOnlineMatch());
     this.onPressed('Lobby/LeaveButton', () => void this.leaveRoom());
 
@@ -48,15 +71,35 @@ export default class Main extends Control {
 
   // ---------------------------------------------------------------- solo
 
-  private startSolo(): void {
-    const def = loadMapDef(this.selectedMapId());
-    const roster: RosterEntry[] = [
+  private soloRoster(): RosterEntry[] {
+    return [
       { kind: 'human', name: this.nickname() },
       { kind: 'bot', name: 'Bot Nils' },
       { kind: 'bot', name: 'Bot Astrid' },
       { kind: 'bot', name: 'Bot Erik' },
     ];
-    this.beginMatch(def.id, roster, this.newSeed(), 'solo', 0);
+  }
+
+  private startSolo(): void {
+    this.campaign = false;
+    this.beginMatch(this.selectedMapId(), this.soloRoster(), this.newSeed(), 'solo', 0);
+  }
+
+  // ------------------------------------------------------------ campaign
+
+  private startCampaign(): void {
+    if (this.progress.completed.length >= this.mapIds.length) {
+      this.progress = resetCampaign();
+    }
+    const next = this.nextCampaignMap();
+    if (!next) return;
+    this.campaign = true;
+    this.campaignMapId = next;
+    this.beginMatch(next, this.soloRoster(), this.newSeed(), 'solo', 0);
+  }
+
+  private nextCampaignMap(): string | null {
+    return this.mapIds.find((id) => !this.progress.completed.includes(id)) ?? null;
   }
 
   // -------------------------------------------------------------- online
@@ -193,6 +236,7 @@ export default class Main extends Control {
     localSlot: number
   ): void {
     const def = loadMapDef(mapId);
+    this.currentMapId = mapId;
     const view = new MatchView();
     view.startMatch(def, roster, seed, mode, localSlot);
     view.onFinished = (winner, state) => this.onMatchFinished(winner, state);
@@ -213,6 +257,8 @@ export default class Main extends Control {
     this.node<Control>('MenuPanel').visible = false;
     this.node<Control>('Lobby').visible = false;
     this.node<Control>('LobbyPanel').visible = false;
+    this.node<Control>('Rankings').visible = false;
+    this.node<Control>('RankingsPanel').visible = false;
     this.node<Control>('MenuBackground').visible = false;
     this.node<Label>('HudLabel').text =
       `${def.name} — ${def.district}. Arrows/WASD to move, Space to bomb.`;
@@ -225,11 +271,48 @@ export default class Main extends Control {
     if (this.room?.isHost) {
       void this.room.send({ type: 'game_over', winner });
     }
-    const label = this.node<Label>('HudLabel');
-    label.text =
-      winner === null
-        ? 'Draw! Returning to menu…'
-        : `${state.players[winner].name} wins! Returning to menu…`;
+
+    const mapId = this.currentMapId ?? this.mapIds[0];
+    recordResults(
+      state.players.map((p) => ({
+        name: p.name,
+        mapId,
+        score: p.score,
+        won: p.id === winner,
+      }))
+    );
+
+    const scoreboard = [...state.players]
+      .sort((a, b) => b.score - a.score)
+      .map((p) => `${p.name} ${p.score}`)
+      .join('  ·  ');
+    const headline =
+      winner === null ? 'Draw!' : `${state.players[winner].name} wins!`;
+
+    this.afterMatch = 'menu';
+    let epilogue = '';
+    if (this.campaign) {
+      const localWon = winner === 0;
+      if (localWon && this.campaignMapId) {
+        if (!this.progress.completed.includes(this.campaignMapId)) {
+          this.progress.completed.push(this.campaignMapId);
+        }
+        this.progress.totalScore += state.players[0].score;
+        saveCampaign(this.progress);
+        const remaining = this.mapIds.length - this.progress.completed.length;
+        if (remaining > 0) {
+          this.afterMatch = 'campaign-next';
+          epilogue = ` Next stop: ${loadMapDef(this.nextCampaignMap()!).name}…`;
+        } else {
+          epilogue = ` CAMPAIGN COMPLETE — ${this.progress.totalScore} pts!`;
+        }
+      } else {
+        this.afterMatch = 'campaign-retry';
+        epilogue = ' Try this map again…';
+      }
+    }
+
+    this.node<Label>('HudLabel').text = `${headline}  ${scoreboard}.${epilogue}`;
     AudioBank.playMusic(winner === null ? 'draw' : 'victory');
     if (winner !== null) AudioBank.playSfx('winner');
     this.get_tree()
@@ -244,9 +327,21 @@ export default class Main extends Control {
     }
     if (this.room) {
       void this.leaveRoom();
-    } else {
-      this.showMenu();
+      return;
     }
+    if (this.afterMatch === 'campaign-next' || this.afterMatch === 'campaign-retry') {
+      const mapId =
+        this.afterMatch === 'campaign-next'
+          ? this.nextCampaignMap()
+          : this.campaignMapId;
+      if (mapId) {
+        this.campaignMapId = mapId;
+        this.beginMatch(mapId, this.soloRoster(), this.newSeed(), 'solo', 0);
+        return;
+      }
+    }
+    this.campaign = false;
+    this.showMenu();
   }
 
   // ------------------------------------------------------------------ ui
@@ -256,12 +351,48 @@ export default class Main extends Control {
     this.node<Control>('MenuPanel').visible = true;
     this.node<Control>('Lobby').visible = false;
     this.node<Control>('LobbyPanel').visible = false;
+    this.node<Control>('Rankings').visible = false;
+    this.node<Control>('RankingsPanel').visible = false;
     this.node<Control>('MenuBackground').visible = true;
     this.node<Label>('HudLabel').visible = false;
     this.setStatus('');
+
+    const done = this.progress.completed.length;
+    this.node<Button>('Menu/CampaignButton').text =
+      done >= this.mapIds.length
+        ? `Campaign complete! (${this.progress.totalScore} pts) — restart`
+        : `Campaign  ${done}/${this.mapIds.length}`;
+
     // Keyboard-first: Enter starts a solo match right away.
     this.node<Button>('Menu/PlaySolo').grab_focus();
     AudioBank.playMusic('title');
+  }
+
+  private showRankings(): void {
+    this.node<Control>('Menu').visible = false;
+    this.node<Control>('MenuPanel').visible = false;
+    this.node<Control>('Rankings').visible = true;
+    this.node<Control>('RankingsPanel').visible = true;
+
+    const entries = loadRankings();
+    const overall = overallRanking(entries).slice(0, 8);
+    this.node<Label>('Rankings/OverallLabel').text =
+      overall.length === 0
+        ? 'No matches recorded yet.'
+        : overall
+            .map(
+              (row, i) =>
+                `${i + 1}. ${row.name} — ${row.total} pts (${row.wins} wins)`
+            )
+            .join('\n');
+
+    this.node<Label>('Rankings/PerMapLabel').text = this.mapIds
+      .map((id) => {
+        const best = bestForMap(entries, id);
+        const name = loadMapDef(id).name;
+        return best ? `${name}: ${best.name} — ${best.score}` : `${name}: —`;
+      })
+      .join('\n');
   }
 
   private showLobby(code: string, isHost: boolean): void {
