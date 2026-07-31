@@ -56,6 +56,8 @@ export default class Main extends Control {
     this.onPressed('Menu/JoinRoom', () => void this.joinRoom());
     this.onPressed('Menu/RankingsButton', () => this.showRankings());
     this.onPressed('Rankings/BackButton', () => this.showMenu());
+    this.onPressed('Menu/CreditsButton', () => this.showCredits());
+    this.onPressed('Credits/CreditsBack', () => this.showMenu());
     this.onPressed('Lobby/StartButton', () => this.startOnlineMatch());
     this.onPressed('Lobby/LeaveButton', () => void this.leaveRoom());
 
@@ -263,6 +265,8 @@ export default class Main extends Control {
     this.node<Control>('LobbyPanel').visible = false;
     this.node<Control>('Rankings').visible = false;
     this.node<Control>('RankingsPanel').visible = false;
+    this.node<Control>('Credits').visible = false;
+    this.node<Control>('CreditsPanel').visible = false;
     this.node<Control>('MenuBackground').visible = false;
     this.node<Label>('HudLabel').text =
       `${def.name} — ${def.district}. Arrows/WASD to move, Space to bomb.`;
@@ -365,6 +369,8 @@ export default class Main extends Control {
     this.node<Control>('LobbyPanel').visible = false;
     this.node<Control>('Rankings').visible = false;
     this.node<Control>('RankingsPanel').visible = false;
+    this.node<Control>('Credits').visible = false;
+    this.node<Control>('CreditsPanel').visible = false;
     this.node<Control>('MenuBackground').visible = true;
     this.node<Label>('HudLabel').visible = false;
     this.setStatus('');
@@ -378,6 +384,14 @@ export default class Main extends Control {
     // Keyboard-first: Enter starts a solo match right away.
     this.node<Button>('Menu/PlaySolo').grab_focus();
     AudioBank.playMusic('title');
+  }
+
+  private showCredits(): void {
+    this.node<Control>('Menu').visible = false;
+    this.node<Control>('MenuPanel').visible = false;
+    this.node<Control>('Credits').visible = true;
+    this.node<Control>('CreditsPanel').visible = true;
+    this.node<Button>('Credits/CreditsBack').grab_focus();
   }
 
   private showRankings(): void {

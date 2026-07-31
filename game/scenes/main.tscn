@@ -136,6 +136,10 @@ text = "Join room"
 layout_mode = 2
 text = "Rankings"
 
+[node name="CreditsButton" type="Button" parent="Menu"]
+layout_mode = 2
+text = "Credits"
+
 [node name="Status" type="Label" parent="Menu"]
 layout_mode = 2
 horizontal_alignment = 1
@@ -265,6 +269,101 @@ horizontal_alignment = 1
 text = ""
 
 [node name="BackButton" type="Button" parent="Rankings"]
+layout_mode = 2
+text = "Back"
+
+[node name="CreditsPanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -400.0
+offset_top = -300.0
+offset_right = 400.0
+offset_bottom = 300.0
+theme_override_styles/panel = SubResource("2_panel")
+
+[node name="Credits" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -370.0
+offset_top = -280.0
+offset_right = 370.0
+offset_bottom = 280.0
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="CreditsTitle" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.84, 0.35, 1)
+horizontal_alignment = 1
+text = "Credits"
+
+[node name="CreditsIntro" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 9
+theme_override_colors/font_color = Color(0.8, 0.78, 0.72, 1)
+horizontal_alignment = 1
+autowrap_mode = 2
+text = "uBomber is a free, open-source arcade game made with love for Stockholm.
+MIT License — github.com/jacksonfdam/uBomber"
+
+[node name="ArtTitle" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+horizontal_alignment = 1
+text = "Art"
+
+[node name="ArtLabel" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+horizontal_alignment = 1
+autowrap_mode = 2
+text = "Sprites: 'Bomb Party - the complete set' by Matt Hackett
+(Lost Decade Games) & Cem Kalyoncu - CC-BY 3.0, opengameart.org
+Splash & menu artwork: AI-generated for this project
+Font: 'Press Start 2P' by Cody Boisclair - SIL OFL 1.1"
+
+[node name="SoundTitle" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+horizontal_alignment = 1
+text = "Sound"
+
+[node name="SoundLabel" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+horizontal_alignment = 1
+autowrap_mode = 2
+text = "Music & effects generated with ElevenLabs"
+
+[node name="TechTitle" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+horizontal_alignment = 1
+text = "Made with"
+
+[node name="TechLabel" type="Label" parent="Credits"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+horizontal_alignment = 1
+autowrap_mode = 2
+text = "Godot 4 + GodotJS (TypeScript) - Supabase Realtime - Vercel
+Inspired by Atomic Bomberman (1997). Not affiliated with Konami."
+
+[node name="CreditsBack" type="Button" parent="Credits"]
 layout_mode = 2
 text = "Back"
 
