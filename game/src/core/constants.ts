@@ -2,8 +2,9 @@
 export const TILE_COLS = 15;
 export const TILE_ROWS = 13;
 
-/** Room capacity: 1 host + 4 invited friends; bots fill the remaining slots. */
-export const MAX_HUMANS = 5;
+/** Room capacity: 1 host + 5 invited friends (a full 6-slot arena); bots
+ * fill any remaining slots. */
+export const MAX_HUMANS = 6;
 export const MAX_SLOTS = 6;
 
 /** Movement, in tiles per second. */

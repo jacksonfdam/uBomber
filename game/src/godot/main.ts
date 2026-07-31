@@ -1,5 +1,5 @@
 import { Button, Callable, Control, Label, LineEdit, OptionButton } from 'godot';
-import { MAX_SLOTS, SOLO_LIVES } from '../core/constants';
+import { MAX_HUMANS, MAX_SLOTS, SOLO_LIVES } from '../core/constants';
 import type { GameState, PlayerInput, RosterEntry } from '../core/types';
 import type { LobbyMember, RoomClient } from '../net/room';
 import type { RoomMsg, StartMsg } from '../net/protocol';
@@ -220,7 +220,7 @@ export default class Main extends Control {
       .map((m) => `${m.nickname}${m.isHost ? ' (host)' : ''}`)
       .join('\n');
     this.node<Label>('Lobby/PlayersLabel').text =
-      `Players (${members.length}/5):\n${names}`;
+      `Players (${members.length}/${MAX_HUMANS}):\n${names}`;
   }
 
   private async leaveRoom(): Promise<void> {
