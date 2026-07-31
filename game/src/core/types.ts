@@ -36,6 +36,14 @@ export interface PlayerState {
   activeBombs: number;
   /** Arcade score earned this match (crates, power-ups, kills, win bonus). */
   score: number;
+  /** Lives remaining, counting the one being played. 0 = out of the match. */
+  lives: number;
+  /** Lives the player started with (for the hearts indicator). */
+  maxLives: number;
+  /** Seconds until this (dead but not out) player respawns. */
+  respawnIn: number;
+  /** Post-respawn grace period during which flames don't kill. */
+  invulnFor: number;
 }
 
 export interface BombState {
@@ -75,6 +83,8 @@ export interface GameState {
   flames: FlameState[];
   powerups: PowerUpState[];
   nextBombId: number;
+  /** Spawn tile per slot, used for respawns. */
+  spawns: Vec2[];
   /** How many sudden-death wall tiles have been placed so far. */
   suddenDeathClosed: number;
   /** Mulberry32 state; advances deterministically with each random draw. */
@@ -107,4 +117,6 @@ export interface MapDef {
 export interface RosterEntry {
   kind: PlayerKind;
   name: string;
+  /** Lives for this player; defaults to 1 (bots and online matches). */
+  lives?: number;
 }

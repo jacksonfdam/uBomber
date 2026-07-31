@@ -30,6 +30,11 @@ export const MATCH_TIME_SECONDS = 180;
 export const SUDDEN_DEATH_START = 120;
 export const SUDDEN_DEATH_INTERVAL = 0.35;
 
+/** Lives (solo/campaign humans get several; bots and online players get 1). */
+export const SOLO_LIVES = 3;
+export const RESPAWN_DELAY = 2.0;
+export const RESPAWN_INVULN = 2.5;
+
 /** Arcade scoring. */
 export const SCORE_CRATE = 10;
 export const SCORE_POWERUP = 25;

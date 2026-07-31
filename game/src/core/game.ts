@@ -11,6 +11,8 @@ import {
   MAX_SPEED,
   PLAYER_RADIUS,
   POWERUP_DROP_CHANCE,
+  RESPAWN_DELAY,
+  RESPAWN_INVULN,
   SCORE_CRATE,
   SCORE_KILL,
   SCORE_POWERUP,
@@ -66,6 +68,10 @@ export function createGame(
     flameRange: BASE_FLAME_RANGE,
     activeBombs: 0,
     score: 0,
+    lives: Math.max(1, entry.lives ?? 1),
+    maxLives: Math.max(1, entry.lives ?? 1),
+    respawnIn: 0,
+    invulnFor: 0,
   }));
 
   return {
@@ -79,6 +85,7 @@ export function createGame(
     flames: [],
     powerups: [],
     nextBombId: 1,
+    spawns,
     suddenDeathClosed: 0,
     rngState: (seed ^ 0x9e3779b9) | 0,
   };
@@ -133,7 +140,37 @@ export function step(
   updateFlames(state, dt);
   killPlayersInFlames(state);
   updateSuddenDeath(state);
+  updateRespawns(state, dt);
   resolveOutcome(state, dt);
+}
+
+/** Takes one life; players with lives left queue a respawn at their spawn. */
+function loseLife(state: GameState, p: PlayerState): void {
+  p.alive = false;
+  p.lives = Math.max(0, p.lives - 1);
+  if (p.lives > 0) p.respawnIn = RESPAWN_DELAY;
+}
+
+function updateRespawns(state: GameState, dt: number): void {
+  for (const p of state.players) {
+    if (p.alive) {
+      p.invulnFor = Math.max(0, p.invulnFor - dt);
+      continue;
+    }
+    if (p.lives <= 0 || p.respawnIn <= 0) continue;
+    p.respawnIn -= dt;
+    if (p.respawnIn > 0) continue;
+
+    const spawn = state.spawns[p.id];
+    // Sudden death may have walled the spawn over; then the life is lost too.
+    if (!spawn || state.grid[spawn.y][spawn.x] !== 'floor') {
+      p.lives = 0;
+      continue;
+    }
+    p.alive = true;
+    p.pos = { x: spawn.x + 0.5, y: spawn.y + 0.5 };
+    p.invulnFor = RESPAWN_INVULN;
+  }
 }
 
 /** From SUDDEN_DEATH_START on, walls close over the arena one tile at a
@@ -164,7 +201,7 @@ function updateSuddenDeath(state: GameState): void {
     for (const p of state.players) {
       if (!p.alive) continue;
       const here = tileOf(p.pos);
-      if (here.x === t.x && here.y === t.y) p.alive = false;
+      if (here.x === t.x && here.y === t.y) loseLife(state, p);
     }
   }
 }
@@ -379,11 +416,11 @@ function updateFlames(state: GameState, dt: number): void {
 
 function killPlayersInFlames(state: GameState): void {
   for (const p of state.players) {
-    if (!p.alive) continue;
+    if (!p.alive || p.invulnFor > 0) continue;
     const here = tileOf(p.pos);
     const flame = state.flames.find((f) => f.x === here.x && f.y === here.y);
     if (!flame) continue;
-    p.alive = false;
+    loseLife(state, p);
     const killer = state.players[flame.owner];
     if (!killer) continue;
     killer.score += flame.owner === p.id ? SCORE_SUICIDE : SCORE_KILL;
@@ -391,10 +428,11 @@ function killPlayersInFlames(state: GameState): void {
 }
 
 function resolveOutcome(state: GameState, _dt: number): void {
-  const alive = state.players.filter((p) => p.alive);
-  if (alive.length <= 1) {
+  // Anyone alive or waiting on a respawn is still in the fight.
+  const contenders = state.players.filter((p) => p.alive || p.lives > 0);
+  if (contenders.length <= 1) {
     state.status = 'finished';
-    state.winner = alive.length === 1 ? alive[0].id : null;
+    state.winner = contenders.length === 1 ? contenders[0].id : null;
     if (state.winner !== null) {
       state.players[state.winner].score += SCORE_WIN;
     }

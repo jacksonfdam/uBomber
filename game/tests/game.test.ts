@@ -4,6 +4,8 @@ import {
   BOMB_FUSE,
   FLAME_TTL,
   MATCH_TIME_SECONDS,
+  RESPAWN_DELAY,
+  RESPAWN_INVULN,
   SCORE_CRATE,
   SCORE_KILL,
   SCORE_POWERUP,
@@ -235,6 +237,61 @@ describe('scoring', () => {
     expect(state.players[0].alive).toBe(false);
     expect(state.players[0].score).toBe(SCORE_SUICIDE);
     expect(state.players[1].score).toBe(SCORE_WIN);
+  });
+});
+
+describe('lives and respawn', () => {
+  const THREE_LIVES = [
+    { kind: 'human' as const, name: 'A', lives: 3 },
+    { kind: 'human' as const, name: 'B' },
+  ];
+
+  function killPlayerZero(state: ReturnType<typeof createGame>) {
+    state.bombs.push({ id: 99, owner: 1, x: 1, y: 1, fuse: 0.01, range: 1 });
+    state.players[1].activeBombs = 1;
+    step(state, [], TICK_DT);
+  }
+
+  it('respawns at the spawn point with brief invulnerability', () => {
+    const state = createGame(TEST_MAP, THREE_LIVES, 1);
+    state.players[1].pos = { x: 13.5, y: 11.5 };
+
+    killPlayerZero(state);
+    expect(state.players[0].alive).toBe(false);
+    expect(state.players[0].lives).toBe(2);
+    expect(state.status).toBe('running');
+
+    run(state, [], RESPAWN_DELAY + 0.1);
+    const p0 = state.players[0];
+    expect(p0.alive).toBe(true);
+    expect(p0.pos).toEqual({ x: 1.5, y: 1.5 });
+    expect(p0.invulnFor).toBeGreaterThan(0);
+
+    // Flames on the spawn cannot kill during the grace period.
+    state.flames.push({ x: 1, y: 1, ttl: 0.4, owner: 1 });
+    step(state, [], TICK_DT);
+    expect(state.players[0].alive).toBe(true);
+  });
+
+  it('ends the match once all spare lives are gone', () => {
+    const state = createGame(
+      TEST_MAP,
+      [
+        { kind: 'human' as const, name: 'A', lives: 2 },
+        { kind: 'human' as const, name: 'B' },
+      ],
+      1
+    );
+    state.players[1].pos = { x: 13.5, y: 11.5 };
+
+    killPlayerZero(state);
+    expect(state.status).toBe('running');
+    run(state, [], RESPAWN_DELAY + RESPAWN_INVULN + 0.2);
+
+    killPlayerZero(state);
+    expect(state.players[0].lives).toBe(0);
+    expect(state.status).toBe('finished');
+    expect(state.winner).toBe(1);
   });
 });
 
