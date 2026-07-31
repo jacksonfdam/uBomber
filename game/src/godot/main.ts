@@ -1,4 +1,12 @@
-import { Button, Callable, Control, Label, LineEdit, OptionButton } from 'godot';
+import {
+  Button,
+  Callable,
+  Control,
+  Input,
+  Label,
+  LineEdit,
+  OptionButton,
+} from 'godot';
 import { MAX_HUMANS, MAX_SLOTS, SOLO_LIVES } from '../core/constants';
 import type { GameState, PlayerInput, RosterEntry } from '../core/types';
 import type { LobbyMember, RoomClient } from '../net/room';
@@ -60,6 +68,8 @@ export default class Main extends Control {
     this.onPressed('Credits/CreditsBack', () => this.showMenu());
     this.onPressed('Lobby/StartButton', () => this.startOnlineMatch());
     this.onPressed('Lobby/LeaveButton', () => void this.leaveRoom());
+    this.onPressed('Quit/QuitYes', () => this.confirmQuit());
+    this.onPressed('Quit/QuitNo', () => this.closeQuitConfirm());
 
     // Invite links (/game/?room=CODE) drop straight into the join flow.
     const invited = this.roomCodeFromLocation();
@@ -69,6 +79,53 @@ export default class Main extends Control {
     }
 
     this.showMenu();
+  }
+
+  /** Esc navigation: back out of sub-screens; in a match, ask first. */
+  _process(_delta: number): void {
+    if (!Input.is_action_just_pressed('back')) return;
+
+    if (this.node<Control>('Quit').visible) {
+      this.closeQuitConfirm();
+      return;
+    }
+    if (this.view && this.view.getState()?.status === 'running') {
+      this.openQuitConfirm();
+      return;
+    }
+    if (this.node<Control>('Lobby').visible) {
+      void this.leaveRoom();
+      return;
+    }
+    if (
+      this.node<Control>('Rankings').visible ||
+      this.node<Control>('Credits').visible
+    ) {
+      this.showMenu();
+    }
+  }
+
+  // -------------------------------------------------------- quit confirm
+
+  private openQuitConfirm(): void {
+    this.node<Control>('Quit').visible = true;
+    this.node<Control>('QuitPanel').visible = true;
+    this.node<Button>('Quit/QuitNo').grab_focus();
+    // Solo/campaign matches hold still behind the dialog; online keeps going.
+    this.view?.setPaused(true);
+  }
+
+  private closeQuitConfirm(): void {
+    this.node<Control>('Quit').visible = false;
+    this.node<Control>('QuitPanel').visible = false;
+    this.view?.setPaused(false);
+  }
+
+  private confirmQuit(): void {
+    this.closeQuitConfirm();
+    this.campaign = false;
+    this.afterMatch = 'menu';
+    this.endMatch();
   }
 
   // ---------------------------------------------------------------- solo
@@ -269,6 +326,8 @@ export default class Main extends Control {
     this.node<Control>('RankingsPanel').visible = false;
     this.node<Control>('Credits').visible = false;
     this.node<Control>('CreditsPanel').visible = false;
+    this.node<Control>('Quit').visible = false;
+    this.node<Control>('QuitPanel').visible = false;
     this.node<Control>('MenuBackground').visible = false;
     this.node<Label>('HudLabel').text =
       `${def.name} — ${def.district}. Arrows/WASD to move, Space to bomb.`;
@@ -373,6 +432,8 @@ export default class Main extends Control {
     this.node<Control>('RankingsPanel').visible = false;
     this.node<Control>('Credits').visible = false;
     this.node<Control>('CreditsPanel').visible = false;
+    this.node<Control>('Quit').visible = false;
+    this.node<Control>('QuitPanel').visible = false;
     this.node<Control>('MenuBackground').visible = true;
     this.node<Label>('HudLabel').visible = false;
     this.setStatus('');

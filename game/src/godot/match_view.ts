@@ -84,6 +84,8 @@ export default class MatchView extends Node2D {
 
   /** Pause is offline-only: solo and campaign, never online matches. */
   private paused = false;
+  /** True when the pause was requested by the quit dialog (no overlay). */
+  private dialogPause = false;
 
   /** Latest input per remote human slot (host mode). */
   private remoteInputs = new Map<number, PlayerInput>();
@@ -167,6 +169,16 @@ export default class MatchView extends Node2D {
     };
   }
 
+  /** External pause control (quit dialog). Only offline matches truly pause;
+   * online matches must keep simulating for the other players. */
+  setPaused(value: boolean): void {
+    this.paused = this.mode === 'solo' && this.state?.status === 'running'
+      ? value
+      : false;
+    this.dialogPause = this.paused;
+    if (this.paused) this.accumulator = 0;
+  }
+
   applySnapshot(state: GameState): void {
     if (this.mode !== 'guest') return;
     this.state = state;
@@ -192,6 +204,7 @@ export default class MatchView extends Node2D {
       Input.is_action_just_pressed('pause')
     ) {
       this.paused = !this.paused;
+      this.dialogPause = false;
     }
     if (this.paused) {
       this.accumulator = 0;
@@ -380,7 +393,7 @@ export default class MatchView extends Node2D {
     this.drawBombs(state);
     this.drawSolidsAndPlayers(state);
     this.drawScores(state);
-    if (this.paused) this.drawPauseOverlay();
+    if (this.paused && !this.dialogPause) this.drawPauseOverlay();
   }
 
   /** Live scoreboard in the left margin: color chip, name and points per
@@ -485,7 +498,7 @@ export default class MatchView extends Node2D {
     this.draw_string(
       this.font,
       new Vector2(0, 440),
-      'P / ESC to resume',
+      'P to resume - ESC to leave',
       1,
       1280,
       10,

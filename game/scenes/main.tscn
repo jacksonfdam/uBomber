@@ -367,6 +367,50 @@ Inspired by Atomic Bomberman (1997). Not affiliated with Konami."
 layout_mode = 2
 text = "Back"
 
+[node name="QuitPanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -110.0
+offset_right = 260.0
+offset_bottom = 110.0
+theme_override_styles/panel = SubResource("3_panel")
+
+[node name="Quit" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -90.0
+offset_right = 230.0
+offset_bottom = 90.0
+alignment = 1
+theme_override_constants/separation = 14
+
+[node name="QuitLabel" type="Label" parent="Quit"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(1, 0.84, 0.35, 1)
+horizontal_alignment = 1
+text = "Leave the match?"
+
+[node name="QuitYes" type="Button" parent="Quit"]
+layout_mode = 2
+text = "Yes, back to menu"
+
+[node name="QuitNo" type="Button" parent="Quit"]
+layout_mode = 2
+text = "Keep playing"
+
 [node name="HudLabel" type="Label" parent="."]
 visible = false
 layout_mode = 1
