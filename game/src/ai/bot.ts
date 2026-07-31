@@ -32,12 +32,18 @@ const REPLAN_INTERVAL = 0.25;
  */
 export class BotController {
   private path: Vec2[] = [];
-  private replanIn = 0;
+  private replanIn: number;
   private wantBomb = false;
   /** Seconds spent hugging an enemy without finding a shot (stall breaker). */
   private stalledFor = 0;
+  /** Slot-seasoned replan period so bots never decide in lockstep — identical
+   * cadences made them pick the same BFS paths and walk stacked together. */
+  private readonly cadence: number;
 
-  constructor(public readonly slot: number) {}
+  constructor(public readonly slot: number) {
+    this.cadence = REPLAN_INTERVAL + ((slot * 13) % 5) * 0.02;
+    this.replanIn = ((slot * 7) % 10) * 0.025;
+  }
 
   update(state: GameState, dt: number): PlayerInput {
     const me = state.players[this.slot];
@@ -56,7 +62,7 @@ export class BotController {
       (next !== undefined && danger[next.y][next.x] < 0.6);
 
     if (urgent || this.replanIn <= 0 || this.path.length === 0) {
-      this.replanIn = REPLAN_INTERVAL;
+      this.replanIn = this.cadence;
       this.plan(state, me, danger, here);
     }
 
@@ -73,7 +79,7 @@ export class BotController {
   ): void {
     if (danger[here.y][here.x] !== Infinity) {
       this.stalledFor = 0;
-      this.path = fleePath(state, here, danger, me.speed);
+      this.path = fleePath(state, here, danger, me.speed, me.id, true);
       return;
     }
 
@@ -85,7 +91,7 @@ export class BotController {
         y: here.y,
         range: me.flameRange,
       });
-      this.path = fleePath(state, here, withBomb, me.speed);
+      this.path = fleePath(state, here, withBomb, me.speed, me.id, true);
       return;
     }
 
@@ -251,28 +257,85 @@ function walkable(state: GameState, x: number, y: number, from: Vec2): boolean {
 }
 
 /**
+ * Escape destinations already claimed during the current tick. When a bomb
+ * drops, every threatened bot replans on that same tick (the urgent path),
+ * and identical BFS orders used to send them all to the same safe pocket —
+ * where they sat stacked for the whole fuse. Bots run in slot order, so
+ * later bots see earlier claims and spread out.
+ */
+const escapeClaims = new WeakMap<GameState, { tick: number; tiles: Set<number> }>();
+
+function claimsFor(state: GameState): Set<number> {
+  let entry = escapeClaims.get(state);
+  if (!entry || entry.tick !== state.tick) {
+    entry = { tick: state.tick, tiles: new Set() };
+    escapeClaims.set(state, entry);
+  }
+  return entry.tiles;
+}
+
+/**
  * BFS to the nearest fully safe tile. Danger tiles may be crossed only when
  * we would be through them well before (or well after) their blast window —
  * walking into a tile as it ignites was the main way bots killed themselves.
+ *
+ * Prefers a safe tile nobody stands on or has claimed this tick; when the
+ * only escape is contested, safety wins and the constraint is dropped.
  */
 function fleePath(
   state: GameState,
   from: Vec2,
   danger: number[][],
-  speed: number
+  speed: number,
+  meId?: number,
+  claim = false
 ): Vec2[] {
-  const found = bfs(
+  const timingBlocked = (x: number, y: number, dist: number) => {
+    const blastAt = danger[y][x];
+    if (blastAt === Infinity) return false;
+    const arrival = dist / speed;
+    return arrival > blastAt - 0.35 && arrival < blastAt + FLAME_TTL + 0.25;
+  };
+
+  const claims = claimsFor(state);
+  const occupied = meId === undefined ? new Set<number>() : occupiedTiles(state, meId);
+  const free = (x: number, y: number) => {
+    const k = y * TILE_COLS + x;
+    return !claims.has(k) && !occupied.has(k);
+  };
+
+  const spread = bfs(
     state,
     from,
-    (x, y, dist) => danger[y][x] === Infinity && dist <= 10,
-    (x, y, dist) => {
-      const blastAt = danger[y][x];
-      if (blastAt === Infinity) return false;
-      const arrival = dist / speed;
-      return arrival > blastAt - 0.35 && arrival < blastAt + FLAME_TTL + 0.25;
-    }
+    (x, y, dist) => danger[y][x] === Infinity && dist <= 10 && free(x, y),
+    timingBlocked
   );
+  const found =
+    spread ??
+    bfs(
+      state,
+      from,
+      (x, y, dist) => danger[y][x] === Infinity && dist <= 10,
+      timingBlocked
+    );
+  if (claim && found && found.length > 0) {
+    const end = found[found.length - 1];
+    claims.add(end.y * TILE_COLS + end.x);
+  }
   return found ?? [];
+}
+
+/** Tiles under other living players; calm pathing treats them as solid so
+ * bots stop overlapping and marching through each other. Fleeing ignores
+ * this on purpose — escaping a blast beats personal space. */
+function occupiedTiles(state: GameState, meId: number): Set<number> {
+  const occupied = new Set<number>();
+  for (const p of state.players) {
+    if (!p.alive || p.id === meId) continue;
+    const t = tileOf(p.pos);
+    occupied.add(t.y * TILE_COLS + t.x);
+  }
+  return occupied;
 }
 
 function huntPath(
@@ -281,8 +344,11 @@ function huntPath(
   from: Vec2,
   danger: number[][]
 ): Vec2[] {
-  // While hunting there is no urgency: never route through a threatened tile.
-  const avoidDanger = (x: number, y: number) => danger[y][x] !== Infinity;
+  // While hunting there is no urgency: never route through a threatened tile
+  // or another player.
+  const occupied = occupiedTiles(state, me.id);
+  const avoidDanger = (x: number, y: number) =>
+    danger[y][x] !== Infinity || occupied.has(y * TILE_COLS + x);
 
   // Priority 1: reachable power-up.
   const toPowerUp = bfs(
@@ -327,6 +393,9 @@ function wanderPath(
   danger: number[][],
   slot: number
 ): Vec2[] {
+  const occupied = occupiedTiles(state, slot);
+  const avoid = (x: number, y: number) =>
+    danger[y][x] !== Infinity || occupied.has(y * TILE_COLS + x);
   const far = bfs(
     state,
     from,
@@ -334,14 +403,14 @@ function wanderPath(
       dist >= 3 &&
       danger[y][x] === Infinity &&
       (x * 7 + y * 13 + slot * 5) % 3 === 0,
-    (x, y) => danger[y][x] !== Infinity
+    avoid
   );
   if (far) return far;
   const any = bfs(
     state,
     from,
     (x, y, dist) => dist >= 2 && danger[y][x] === Infinity,
-    (x, y) => danger[y][x] !== Infinity
+    avoid
   );
   return any ?? [];
 }

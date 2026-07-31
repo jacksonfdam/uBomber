@@ -143,6 +143,42 @@ describe('BotController', () => {
     }
   );
 
+  it.each([42, 7])(
+    'bots do not stack: overlap stays rare over a minute (seed %i)',
+    (seed) => {
+      const state = createGame(
+        loadMap('gamla-stan'),
+        [
+          { kind: 'bot', name: 'A' },
+          { kind: 'bot', name: 'B' },
+          { kind: 'bot', name: 'C' },
+          { kind: 'bot', name: 'D' },
+        ],
+        seed
+      );
+      const bots = state.players.map((p) => new BotController(p.id));
+
+      let overlapTicks = 0;
+      let ticks = 0;
+      const maxTicks = Math.round(60 / TICK_DT);
+      for (let i = 0; i < maxTicks && state.status === 'running'; i++) {
+        const inputs = bots.map((b) => b.update(state, TICK_DT));
+        step(state, inputs, TICK_DT);
+        ticks++;
+        const tiles = state.players
+          .filter((p) => p.alive)
+          .map((p) => {
+            const t = tileOf(p.pos);
+            return `${t.x},${t.y}`;
+          });
+        if (new Set(tiles).size < tiles.length) overlapTicks++;
+      }
+
+      // Transient crossings are fine; camping on top of each other is not.
+      expect(overlapTicks / ticks, `overlap fraction (seed ${seed})`).toBeLessThan(0.08);
+    }
+  );
+
   it('plays a full match without stalling: bombs are placed and crates fall', () => {
     const state = createGame(
       loadMap('gamla-stan'),
