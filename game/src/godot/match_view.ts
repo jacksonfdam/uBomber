@@ -82,6 +82,9 @@ export default class MatchView extends Node2D {
   /** Bomb press captured per frame, consumed by the next sim tick. */
   private bombQueued = false;
 
+  /** Pause is offline-only: solo and campaign, never online matches. */
+  private paused = false;
+
   /** Latest input per remote human slot (host mode). */
   private remoteInputs = new Map<number, PlayerInput>();
 
@@ -141,6 +144,7 @@ export default class MatchView extends Node2D {
     this.finishedNotified = false;
     this.accumulator = 0;
     this.bombQueued = false;
+    this.paused = false;
     this.heard = {
       bombs: 0,
       flames: 0,
@@ -181,12 +185,27 @@ export default class MatchView extends Node2D {
   _process(delta: number): void {
     if (!this.state) return;
 
-    // A dead local player can skip the spectator phase with the bomb key.
+    // Offline pause (solo/campaign). Online matches must keep simulating.
+    if (
+      this.mode === 'solo' &&
+      this.state.status === 'running' &&
+      Input.is_action_just_pressed('pause')
+    ) {
+      this.paused = !this.paused;
+    }
+    if (this.paused) {
+      this.accumulator = 0;
+      this.queue_redraw();
+      return;
+    }
+
+    // A local player who is out of lives can skip the spectator phase.
     const local = this.state.players[this.localSlot];
     if (
       this.state.status === 'running' &&
       local &&
       !local.alive &&
+      local.lives <= 0 &&
       Input.is_action_just_pressed('place_bomb')
     ) {
       this.onSkip?.();
@@ -361,6 +380,7 @@ export default class MatchView extends Node2D {
     this.drawBombs(state);
     this.drawSolidsAndPlayers(state);
     this.drawScores(state);
+    if (this.paused) this.drawPauseOverlay();
   }
 
   /** Live scoreboard in the left margin: color chip, name and points per
@@ -396,20 +416,81 @@ export default class MatchView extends Node2D {
         12,
         p.alive ? gold : dead
       );
+
+      // Hearts for players with extra lives (solo/campaign humans): filled
+      // for lives remaining, faded for lives spent.
+      if (p.maxLives > 1) {
+        const remaining = p.lives;
+        for (let h = 0; h < p.maxLives; h++) {
+          this.drawHeart(
+            96 + h * 20,
+            y + 28,
+            2,
+            h < remaining
+              ? new Color(0.89, 0.34, 0.3, 1)
+              : new Color(1, 1, 1, 0.16)
+          );
+        }
+      }
     }
 
     const local = state.players[this.localSlot];
     if (state.status === 'running' && local && !local.alive) {
+      const out = local.lives <= 0;
       this.draw_string(
         this.font,
         new Vector2(14, 790),
-        'OUT! SPACE: skip',
+        out ? 'OUT! SPACE: skip' : 'Respawning…',
         0,
         -1,
         9,
         new Color(0.8, 0.5, 0.4, 1)
       );
     }
+  }
+
+  /** Small pixel heart built from rects; `unit` is the pixel size. */
+  private drawHeart(x: number, y: number, unit: number, color: Color): void {
+    const rows = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
+    for (let r = 0; r < rows.length; r++) {
+      for (let c = 0; c < rows[r].length; c++) {
+        if (rows[r][c] !== 'X') continue;
+        this.draw_rect(
+          new Rect2(
+            new Vector2(x + c * unit, y + r * unit),
+            new Vector2(unit, unit)
+          ),
+          color
+        );
+      }
+    }
+  }
+
+  /** Dim overlay + label while the offline game is paused. */
+  private drawPauseOverlay(): void {
+    this.draw_rect(
+      new Rect2(new Vector2(0, 0), new Vector2(1280, 832)),
+      new Color(0, 0, 0, 0.55)
+    );
+    if (!this.font) return;
+    this.draw_string(
+      this.font,
+      new Vector2(0, 400),
+      'PAUSED',
+      1,
+      1280,
+      32,
+      new Color(1, 0.84, 0.35, 1)
+    );
+    this.draw_string(
+      this.font,
+      new Vector2(0, 440),
+      'P / ESC to resume',
+      1,
+      1280,
+      10,
+      new Color(0.8, 0.78, 0.72, 1)
+    );
   }
 
   private drawFloor(): void {
@@ -580,6 +661,11 @@ export default class MatchView extends Node2D {
 
     const step = anim.moving ? Math.floor(anim.walkTime * 9) : 0;
     const reg = charFrame(p.id % CHAR_VARIANTS, anim.facing, step);
+    // Respawn grace period reads as a fast blink.
+    const blink =
+      p.alive && p.invulnFor > 0 && Math.floor(this.viewTime * 10) % 2 === 1
+        ? 0.25
+        : 1;
     // Dead characters drift upward while fading out.
     this.drawSpr(
       reg,
@@ -587,7 +673,7 @@ export default class MatchView extends Node2D {
       feetY - TILE + 6 - fade * 24,
       TILE,
       TILE,
-      new Color(1, 1, 1, 1 - fade)
+      new Color(1, 1, 1, (1 - fade) * blink)
     );
   }
 

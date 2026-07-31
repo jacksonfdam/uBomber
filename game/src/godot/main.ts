@@ -1,5 +1,5 @@
 import { Button, Callable, Control, Label, LineEdit, OptionButton } from 'godot';
-import { MAX_SLOTS } from '../core/constants';
+import { MAX_SLOTS, SOLO_LIVES } from '../core/constants';
 import type { GameState, PlayerInput, RosterEntry } from '../core/types';
 import type { LobbyMember, RoomClient } from '../net/room';
 import type { RoomMsg, StartMsg } from '../net/protocol';
@@ -74,8 +74,10 @@ export default class Main extends Control {
   // ---------------------------------------------------------------- solo
 
   private soloRoster(): RosterEntry[] {
+    // Solo and campaign humans get extra lives; bots (and online players,
+    // whose roster is built in startOnlineMatch) always have one.
     return [
-      { kind: 'human', name: this.nickname() },
+      { kind: 'human', name: this.nickname(), lives: SOLO_LIVES },
       { kind: 'bot', name: 'Bot Nils' },
       { kind: 'bot', name: 'Bot Astrid' },
       { kind: 'bot', name: 'Bot Erik' },
