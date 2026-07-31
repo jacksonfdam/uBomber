@@ -79,6 +79,9 @@ export default class MatchView extends Node2D {
   private inputSendIn = 0;
   private finishedNotified = false;
 
+  /** Bomb press captured per frame, consumed by the next sim tick. */
+  private bombQueued = false;
+
   /** Latest input per remote human slot (host mode). */
   private remoteInputs = new Map<number, PlayerInput>();
 
@@ -137,6 +140,7 @@ export default class MatchView extends Node2D {
     }
     this.finishedNotified = false;
     this.accumulator = 0;
+    this.bombQueued = false;
     this.heard = {
       bombs: 0,
       flames: 0,
@@ -188,6 +192,11 @@ export default class MatchView extends Node2D {
       this.onSkip?.();
       return;
     }
+
+    // Latch the bomb press at frame level: the sim ticks at 30 Hz while
+    // frames run faster, so a per-frame "just pressed" often lands on a
+    // frame that runs no tick and the press would be lost.
+    if (Input.is_action_just_pressed('place_bomb')) this.bombQueued = true;
 
     if (this.mode === 'guest') {
       this.inputSendIn -= delta;
@@ -277,7 +286,8 @@ export default class MatchView extends Node2D {
     if (Input.is_action_pressed('move_right')) dx += 1;
     if (Input.is_action_pressed('move_up')) dy -= 1;
     if (Input.is_action_pressed('move_down')) dy += 1;
-    const bomb = Input.is_action_just_pressed('place_bomb');
+    const bomb = this.bombQueued;
+    this.bombQueued = false;
     return { dx, dy, bomb };
   }
 
