@@ -1,8 +1,12 @@
 /**
- * Screen router and match lifecycle: main menu, online lobby, rankings,
- * credits, and the match itself.
+ * The cabinet: attract mode, menu, options, lobby, rankings, credits, and the
+ * match lifecycle.
  *
- * The Supabase client is loaded on demand — a solo player never downloads the
+ * Menu screens share one persistent "cabinet" layer — a live attract-mode match
+ * with a CRT overlay on top — so moving between the menu and its sub-screens
+ * never restarts the demo. Only starting a real match tears it down.
+ *
+ * The Supabase client is loaded on demand: a solo player never downloads the
  * networking code at all, which is most of the JavaScript weight.
  */
 
@@ -28,12 +32,16 @@ import {
   saveQuality,
 } from './persist';
 import type { PostSettings } from './render/post';
+import { AttractMode } from './ui/attract';
 import { Hud, showOverlay } from './ui/hud';
+import { mountLogo } from './ui/logo';
+import { ArcadeMenu, type MenuRow } from './ui/menu';
+import { arcadeCase } from './ui/text';
 
 /** Total combatants when humans alone do not fill the arena. */
 const TARGET_COMBATANTS = 4;
 
-const BOT_NAMES = ['Bot Nils', 'Bot Astrid', 'Bot Erik', 'Bot Greta', 'Bot Sven'];
+const BOT_NAMES = ['Nils', 'Astrid', 'Erik', 'Greta', 'Sven'];
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -56,6 +64,14 @@ export class App {
   private root: HTMLElement;
   private audio: AudioEngine;
 
+  // --- cabinet (menu screens)
+  private cabinet: HTMLElement | null = null;
+  private arcade: HTMLElement | null = null;
+  private attract: AttractMode | null = null;
+  private disposeLogo: (() => void) | null = null;
+  private menu: ArcadeMenu | null = null;
+
+  // --- match
   private match: Match | null = null;
   private stage: HTMLElement | null = null;
   private closeOverlay: (() => void) | null = null;
@@ -63,9 +79,11 @@ export class App {
 
   private room: RoomClient | null = null;
   private members: LobbyMember[] = [];
+  private lobbyList: { heading: HTMLElement; list: HTMLElement } | null = null;
 
   private nickname = loadNickname();
-  private selectedMapId = MAP_IDS[0];
+  private roomCode = '';
+  private mapIndex = 0;
   private quality: PostSettings = loadQuality();
 
   private campaign = false;
@@ -82,19 +100,19 @@ export class App {
     window.addEventListener('keydown', this.onGlobalKey);
 
     const invited = this.inviteCodeFromLocation();
-    if (invited) this.status = `Invite detected — press "Join room" to enter ${invited}.`;
-    this.showMenu(invited ?? '');
+    if (invited) {
+      this.roomCode = invited;
+      this.status = `INVITE ${invited} DETECTED — SELECT JOIN ROOM`;
+    }
+    this.showMenu();
   }
 
-  // ------------------------------------------------------------ navigation
+  // ------------------------------------------------------------- navigation
 
   /** Esc backs out of sub-screens; in a match it asks first. */
   private onGlobalKey = (event: KeyboardEvent): void => {
     if (event.code !== 'Escape') return;
-    if (this.closeOverlay) {
-      // The quit dialog owns Escape while it is open.
-      return;
-    }
+    if (this.closeOverlay) return; // The open dialog owns Escape.
     if (this.match) {
       event.preventDefault();
       this.openQuitConfirm();
@@ -104,13 +122,53 @@ export class App {
       void this.leaveRoom();
       return;
     }
-    if (this.root.querySelector('[data-screen="rankings"], [data-screen="credits"]')) {
+    if (this.arcade?.dataset.screen && this.arcade.dataset.screen !== 'menu') {
       this.audio.play('menu-back');
       this.showMenu();
     }
   };
 
-  private clear(): void {
+  // ---------------------------------------------------------------- cabinet
+
+  /** Creates the attract layer once, then reuses it across menu screens. */
+  private ensureCabinet(): HTMLElement {
+    if (this.cabinet && this.arcade) return this.arcade;
+
+    this.teardownMatch();
+    this.root.replaceChildren();
+
+    const cabinet = el('div');
+    cabinet.style.cssText = 'position:absolute;inset:0';
+
+    const attractLayer = el('div', 'attract');
+    const canvas = el('canvas');
+    attractLayer.appendChild(canvas);
+    cabinet.appendChild(attractLayer);
+    cabinet.appendChild(el('div', 'crt'));
+
+    const arcade = el('div', 'arcade');
+    cabinet.appendChild(arcade);
+
+    this.root.appendChild(cabinet);
+    this.cabinet = cabinet;
+    this.arcade = arcade;
+    this.attract = new AttractMode(canvas);
+    return arcade;
+  }
+
+  private teardownCabinet(): void {
+    this.menu?.destroy();
+    this.menu = null;
+    this.disposeLogo?.();
+    this.disposeLogo = null;
+    this.attract?.dispose();
+    this.attract = null;
+    this.cabinet?.remove();
+    this.cabinet = null;
+    this.arcade = null;
+  }
+
+  private teardownMatch(): void {
     this.closeOverlay?.();
     this.closeOverlay = null;
     if (this.resultTimer !== null) {
@@ -119,285 +177,245 @@ export class App {
     }
     this.match?.dispose();
     this.match = null;
+    this.stage?.remove();
     this.stage = null;
-    this.root.replaceChildren();
+  }
+
+  /** Clears the current menu screen, keeping the attract match running. */
+  private openScreen(name: string): HTMLElement {
+    const arcade = this.ensureCabinet();
+    this.menu?.destroy();
+    this.menu = null;
+    this.disposeLogo?.();
+    this.disposeLogo = null;
+    arcade.replaceChildren();
+    arcade.dataset.screen = name;
+    arcade.scrollTop = 0;
+    return arcade;
   }
 
   // ------------------------------------------------------------------ menu
 
-  private showMenu(prefillCode = ''): void {
-    this.clear();
-    this.audio.stopAmbient();
+  private showMenu(): void {
+    const arcade = this.openScreen('menu');
     this.audio.setMood('title');
 
-    const screen = el('div', 'screen');
-    screen.dataset.screen = 'menu';
+    const marquee = el('div', 'marquee');
+    arcade.appendChild(marquee);
+    this.disposeLogo = mountLogo(marquee);
 
-    const brand = el('h1', 'brand');
-    brand.innerHTML = 'u<span>Bomber</span>';
-    screen.append(brand);
-    screen.append(
-      el(
-        'p',
-        'tagline',
-        'Arcade battles across ten Stockholm arenas. Play the bots, run the campaign, or invite up to five friends with a link.'
-      )
-    );
+    arcade.appendChild(el('div', 'tagline', 'TEN ARENAS · ONE STOCKHOLM'));
 
-    // --- play panel
-    const play = el('div', 'panel');
-    play.append(el('h2', undefined, 'Play'));
+    const plate = el('div', 'arena-plate');
+    plate.innerHTML = `NOW SHOWING <b>${arcadeCase(this.attract?.arenaName ?? '')}</b>`;
+    arcade.appendChild(plate);
 
-    const nameField = el('div', 'field');
-    nameField.append(el('label', undefined, 'Nickname'));
-    const nameInput = el('input');
-    nameInput.type = 'text';
-    nameInput.maxLength = 16;
-    nameInput.placeholder = 'Player';
-    nameInput.value = this.nickname;
-    nameInput.addEventListener('input', () => {
-      this.nickname = nameInput.value.trim();
-      saveNickname(this.nickname);
+    const done = this.progress.completed.length;
+    const rows: MenuRow[] = [
+      { label: 'PLAY SOLO', onActivate: () => this.startSolo() },
+      {
+        label: 'CAMPAIGN',
+        value: () =>
+          this.progress.completed.length >= MAP_IDS.length
+            ? 'CLEARED'
+            : `${this.progress.completed.length}/${MAP_IDS.length}`,
+        onActivate: () => this.startCampaign(),
+      },
+      {
+        label: 'ARENA',
+        value: () => `◀ ${arcadeCase(MAPS[this.mapIndex].def.name)} ▶`,
+        onAdjust: (dir) => {
+          this.mapIndex = (this.mapIndex + dir + MAPS.length) % MAPS.length;
+        },
+        onActivate: () => this.startSolo(),
+      },
+      {
+        label: 'PLAYER',
+        input: {
+          placeholder: 'PLAYER',
+          maxLength: 12,
+          initial: this.nickname,
+          onChange: (value) => {
+            this.nickname = value.trim();
+            saveNickname(this.nickname);
+          },
+        },
+      },
+      { rule: true },
+      { label: 'CREATE ROOM', onActivate: () => void this.createRoom() },
+      {
+        label: 'JOIN ROOM',
+        input: {
+          placeholder: 'CODE',
+          maxLength: 6,
+          initial: this.roomCode,
+          uppercase: true,
+          onChange: (value) => {
+            this.roomCode = value.trim();
+          },
+        },
+        onActivate: () => void this.joinRoom(this.roomCode),
+      },
+      { rule: true },
+      { label: 'RANKINGS', onActivate: () => this.showRankings() },
+      { label: 'OPTIONS', onActivate: () => this.showOptions() },
+      { label: 'CREDITS', onActivate: () => this.showCredits() },
+    ];
+
+    this.menu = new ArcadeMenu(arcade, rows, {
+      onMove: () => this.audio.play('menu-move'),
+      onSelect: () => this.audio.play('menu-accept'),
     });
-    nameField.append(nameInput);
-    play.append(nameField);
-
-    const mapField = el('div', 'field');
-    mapField.append(el('label', undefined, 'Arena'));
-    const mapSelect = el('select');
-    for (const entry of MAPS) {
-      const option = el('option', undefined, entry.def.name);
-      option.value = entry.def.id;
-      mapSelect.append(option);
-    }
-    mapSelect.value = this.selectedMapId;
-    mapField.append(mapSelect);
-    play.append(mapField);
-
-    const preview = el('div', 'map-preview');
-    const refreshPreview = (): void => {
-      const entry = mapOrFirst(this.selectedMapId);
-      preview.textContent = `${entry.def.district} — ${entry.def.description}`;
-    };
-    mapSelect.addEventListener('change', () => {
-      this.selectedMapId = mapSelect.value;
-      this.audio.play('menu-move');
-      refreshPreview();
-    });
-    refreshPreview();
-    play.append(preview);
-
-    const actions = el('div', 'row');
-    actions.append(
-      button('Play solo', 'primary', () => {
-        this.audio.play('menu-accept');
-        this.startSolo();
-      }),
-      button(this.campaignLabel(), '', () => {
-        this.audio.play('menu-accept');
-        this.startCampaign();
-      })
-    );
-    play.append(actions);
-    screen.append(play);
-
-    // --- online panel
-    const online = el('div', 'panel');
-    online.append(el('h2', undefined, 'Play with friends'));
-
-    const codeField = el('div', 'field');
-    codeField.append(el('label', undefined, 'Room code'));
-    const codeInput = el('input');
-    codeInput.type = 'text';
-    codeInput.maxLength = 6;
-    codeInput.placeholder = 'K7WQ2R';
-    codeInput.value = prefillCode;
-    codeInput.addEventListener('input', () => {
-      codeInput.value = codeInput.value.toUpperCase();
-    });
-    codeField.append(codeInput);
-    online.append(codeField);
-
-    const netRow = el('div', 'row');
-    netRow.append(
-      button('Create room', '', () => {
-        this.audio.play('menu-accept');
-        void this.createRoom();
-      }),
-      button('Join room', '', () => {
-        this.audio.play('menu-accept');
-        void this.joinRoom(codeInput.value.trim());
-      })
-    );
-    online.append(netRow);
 
     const statusLine = el('div', 'status', this.status);
-    online.append(statusLine);
-    screen.append(online);
+    arcade.appendChild(statusLine);
 
-    // --- settings panel
-    screen.append(this.buildSettingsPanel());
+    arcade.appendChild(el('div', 'insert', done > 0 ? 'CONTINUE YOUR RUN' : 'INSERT COIN'));
+    const hint = el('div', 'hint');
+    hint.innerHTML =
+      '<b>↑↓</b> SELECT &nbsp;·&nbsp; <b>←→</b> CHANGE &nbsp;·&nbsp; <b>SPACE</b> START<br />' +
+      'IN GAME: <b>ARROWS/WASD</b> MOVE &nbsp;·&nbsp; <b>SPACE</b> BOMB &nbsp;·&nbsp; <b>P</b> PAUSE';
+    arcade.appendChild(hint);
 
-    // --- secondary navigation
-    const nav = el('div', 'row');
-    nav.append(
-      button('Rankings', 'ghost', () => {
-        this.audio.play('menu-accept');
-        this.showRankings();
-      }),
-      button('Credits', 'ghost', () => {
-        this.audio.play('menu-accept');
-        this.showCredits();
-      })
-    );
-    const navPanel = el('div', 'panel');
-    navPanel.append(nav);
-    screen.append(navPanel);
-
-    const footer = el('div', 'footer');
-    footer.innerHTML =
-      'Open source under the MIT license · <a href="https://github.com/jacksonfdam/uBomber">Source &amp; docs on GitHub</a>';
-    screen.append(footer);
-
-    this.root.append(screen);
-    requestAnimationFrame(() => {
-      (play.querySelector('button.primary') as HTMLButtonElement | null)?.focus();
-    });
+    // The plate follows the attract match as arenas rotate. It stops on its own
+    // once the element leaves the document, so screen changes cannot pile up
+    // duplicate loops.
+    const followArena = (): void => {
+      if (!plate.isConnected || !this.attract) return;
+      const name = arcadeCase(this.attract.arenaName);
+      const next = `NOW SHOWING <b>${name}</b>`;
+      if (plate.innerHTML !== next) plate.innerHTML = next;
+      requestAnimationFrame(followArena);
+    };
+    requestAnimationFrame(followArena);
   }
 
-  private campaignLabel(): string {
-    const done = this.progress.completed.length;
-    return done >= MAP_IDS.length
-      ? `Campaign complete (${this.progress.totalScore} pts) — restart`
-      : `Campaign ${done}/${MAP_IDS.length}`;
-  }
+  // --------------------------------------------------------------- options
 
-  private buildSettingsPanel(): HTMLElement {
-    const panel = el('div', 'panel');
-    panel.append(el('h2', undefined, 'Sound & visuals'));
+  private showOptions(): void {
+    const arcade = this.openScreen('options');
+    arcade.appendChild(el('h1', 'screen-title', 'OPTIONS'));
 
-    const grid = el('div', 'settings-grid');
-    const slider = (label: string, value: number, onChange: (v: number) => void): HTMLElement => {
-      const field = el('div', 'field');
-      field.append(el('label', undefined, label));
-      const input = el('input');
-      input.type = 'range';
-      input.min = '0';
-      input.max = '100';
-      input.value = String(Math.round(value * 100));
-      input.addEventListener('input', () => onChange(Number(input.value) / 100));
-      field.append(input);
-      return field;
+    /** An 8-bit level readout: ASCII only, so the pixel font always has it. */
+    const bar = (level: number): string => {
+      const filled = Math.round(level * 10);
+      return `[${'#'.repeat(filled)}${'.'.repeat(10 - filled)}] ${filled * 10}%`;
     };
 
-    grid.append(
-      slider('Effects', this.audio.volumes.sfx, (v) =>
-        this.audio.setVolumes({ ...this.audio.volumes, sfx: v })
-      ),
-      slider('Ambience', this.audio.volumes.ambient, (v) =>
-        this.audio.setVolumes({ ...this.audio.volumes, ambient: v })
-      ),
-      slider('Music', this.audio.volumes.music, (v) =>
-        this.audio.setVolumes({ ...this.audio.volumes, music: v })
-      )
-    );
-    panel.append(grid);
+    const volumeRow = (
+      label: string,
+      key: 'sfx' | 'ambient' | 'music'
+    ): MenuRow => ({
+      label,
+      value: () => bar(this.audio.volumes[key]),
+      onAdjust: (dir) => {
+        const next = Math.max(0, Math.min(1, Math.round(this.audio.volumes[key] * 10 + dir) / 10));
+        this.audio.setVolumes({ ...this.audio.volumes, [key]: next });
+      },
+    });
 
-    const toggles = el('div', 'settings-grid');
-    const toggle = (label: string, key: keyof PostSettings): HTMLElement => {
-      const wrap = el('label', 'toggle');
-      const input = el('input');
-      input.type = 'checkbox';
-      input.checked = this.quality[key];
-      input.addEventListener('change', () => {
-        this.quality = { ...this.quality, [key]: input.checked };
+    const toggleRow = (label: string, key: keyof PostSettings): MenuRow => {
+      const flip = (): void => {
+        this.quality = { ...this.quality, [key]: !this.quality[key] };
         saveQuality(this.quality);
         this.match?.applyPost(this.quality);
-      });
-      wrap.append(input, document.createTextNode(label));
-      return wrap;
+      };
+      return {
+        label,
+        value: () => (this.quality[key] ? 'ON' : 'OFF'),
+        onAdjust: flip,
+        onActivate: flip,
+      };
     };
-    toggles.append(
-      toggle('Post-processing', 'enabled'),
-      toggle('Bloom', 'bloom'),
-      toggle('Film grain', 'grain'),
-      toggle('Chromatic aberration', 'aberration')
-    );
-    panel.append(toggles);
-    panel.append(
+
+    const rows: MenuRow[] = [
+      volumeRow('EFFECTS', 'sfx'),
+      volumeRow('AMBIENCE', 'ambient'),
+      volumeRow('MUSIC', 'music'),
+      { rule: true },
+      toggleRow('POST FX', 'enabled'),
+      toggleRow('BLOOM', 'bloom'),
+      toggleRow('FILM GRAIN', 'grain'),
+      toggleRow('ABERRATION', 'aberration'),
+      { rule: true },
+      {
+        label: 'BACK',
+        onActivate: () => {
+          this.audio.play('menu-back');
+          this.showMenu();
+        },
+      },
+    ];
+
+    this.menu = new ArcadeMenu(arcade, rows, {
+      onMove: () => this.audio.play('menu-move'),
+      onSelect: () => this.audio.play('menu-accept'),
+    });
+
+    arcade.appendChild(
       el(
         'div',
-        'map-preview',
-        'Turn post-processing off if the frame rate dips — the arena renders in a handful of draw calls without it.'
+        'hint',
+        'TURN POST FX OFF IF THE FRAME RATE DIPS — THE ARENA STILL DRAWS IN A HANDFUL OF CALLS'
       )
     );
-    return panel;
   }
 
   // -------------------------------------------------------------- rankings
 
   private showRankings(): void {
-    this.clear();
-    const screen = el('div', 'screen');
-    screen.dataset.screen = 'rankings';
-    screen.append(el('h1', 'brand', 'Rankings'));
+    const arcade = this.openScreen('rankings');
+    arcade.appendChild(el('h1', 'screen-title', 'HIGH SCORES'));
 
     const entries = loadRankings();
     const overall = overallRanking(entries).slice(0, 8);
 
     const overallPanel = el('div', 'panel');
-    overallPanel.append(el('h2', undefined, 'Overall'));
+    overallPanel.appendChild(el('h2', undefined, 'OVERALL'));
     if (overall.length === 0) {
-      overallPanel.append(el('div', 'list is-empty', 'No matches recorded yet.'));
+      overallPanel.appendChild(el('div', 'list is-empty', 'NO MATCHES RECORDED YET'));
     } else {
-      overallPanel.append(
-        el(
-          'div',
-          'list',
-          overall
-            .map((row, i) => `${i + 1}. ${row.name} — ${row.total} pts (${row.wins} wins)`)
-            .join('\n')
-        )
-      );
+      overall.forEach((entry, i) => {
+        const rowEl = el('div', 'rank-row');
+        rowEl.appendChild(el('span', 'pos', String(i + 1).padStart(2, '0')));
+        rowEl.appendChild(el('span', undefined, arcadeCase(entry.name)));
+        rowEl.appendChild(el('span', 'pts', `${entry.total} PTS · ${entry.wins}W`));
+        overallPanel.appendChild(rowEl);
+      });
     }
-    screen.append(overallPanel);
+    arcade.appendChild(overallPanel);
 
     const perMap = el('div', 'panel');
-    perMap.append(el('h2', undefined, 'Best per arena'));
-    perMap.append(
-      el(
-        'div',
-        'list',
-        MAPS.map((entry) => {
-          const best = bestForMap(entries, entry.def.id);
-          return best
-            ? `${entry.def.name}: ${best.name} — ${best.score}`
-            : `${entry.def.name}: —`;
-        }).join('\n')
-      )
-    );
-    screen.append(perMap);
+    perMap.appendChild(el('h2', undefined, 'BEST PER ARENA'));
+    for (const entry of MAPS) {
+      const best = bestForMap(entries, entry.def.id);
+      const rowEl = el('div', 'rank-row');
+      rowEl.appendChild(el('span', 'pos', ''));
+      rowEl.appendChild(el('span', undefined, arcadeCase(entry.def.name)));
+      rowEl.appendChild(
+        el('span', 'pts', best ? `${arcadeCase(best.name)} · ${best.score}` : '—')
+      );
+      perMap.appendChild(rowEl);
+    }
+    arcade.appendChild(perMap);
 
-    const back = el('div', 'panel');
-    back.append(
-      button('Back', '', () => {
+    const back = el('div', 'row');
+    back.appendChild(
+      button('BACK', 'primary', () => {
         this.audio.play('menu-back');
         this.showMenu();
       })
     );
-    screen.append(back);
-    this.root.append(screen);
+    arcade.appendChild(back);
   }
 
   private showCredits(): void {
-    this.clear();
-    const screen = el('div', 'screen');
-    screen.dataset.screen = 'credits';
-    screen.append(el('h1', 'brand', 'Credits'));
+    const arcade = this.openScreen('credits');
+    arcade.appendChild(el('h1', 'screen-title', 'CREDITS'));
 
-    const panel = el('div', 'panel credits');
-    panel.innerHTML = `
-      <h2>uBomber</h2>
+    const panel = el('div', 'panel');
+    const prose = el('div', 'prose');
+    prose.innerHTML = `
       <p><strong>Concept &amp; direction:</strong> Jackson Mafra.</p>
       <p><strong>Art:</strong> every tileset, block, bomb, blast and character in
       this game is generated by code in this repository. There are no image
@@ -407,8 +425,7 @@ export class App {
       and no sample libraries.</p>
       <p><strong>Technology:</strong> Three.js (MIT), Vite (MIT), TypeScript
       (Apache-2.0), Vitest (MIT), Supabase Realtime for multiplayer.</p>
-      <p><strong>Typography:</strong> Familjen Grotesk and Martian Mono
-      (SIL OFL 1.1).</p>
+      <p><strong>Typography:</strong> Press Start 2P and Inter (SIL OFL 1.1).</p>
       <p><strong>Setting:</strong> the ten arenas are affectionate
       interpretations of real places in Stockholm. No affiliation with or
       endorsement by any depicted location or operator is implied.</p>
@@ -417,28 +434,32 @@ export class App {
       created for this project, and it is not affiliated with or endorsed by any
       other game or rights holder.</p>
     `;
-    screen.append(panel);
+    panel.appendChild(prose);
+    arcade.appendChild(panel);
 
-    const back = el('div', 'panel');
-    back.append(
-      button('Back', '', () => {
+    const back = el('div', 'row');
+    back.appendChild(
+      button('BACK', 'primary', () => {
         this.audio.play('menu-back');
         this.showMenu();
       })
     );
-    screen.append(back);
-    this.root.append(screen);
+    arcade.appendChild(back);
   }
 
   // ------------------------------------------------------------------ solo
+
+  private get selectedMapId(): string {
+    return MAPS[this.mapIndex].def.id;
+  }
 
   private soloRoster(): RosterEntry[] {
     // Solo and campaign humans get spare lives; bots always have one.
     return [
       { kind: 'human', name: this.playerName(), lives: SOLO_LIVES },
-      { kind: 'bot', name: 'Bot Nils' },
-      { kind: 'bot', name: 'Bot Astrid' },
-      { kind: 'bot', name: 'Bot Erik' },
+      { kind: 'bot', name: 'Nils' },
+      { kind: 'bot', name: 'Astrid' },
+      { kind: 'bot', name: 'Erik' },
     ];
   }
 
@@ -477,7 +498,7 @@ export class App {
       ]);
       const config = await loadNetConfig('');
       if (!config) {
-        this.setStatus('Missing /config.json — Supabase is not configured for this deployment.');
+        this.setStatus('NO /CONFIG.JSON — SUPABASE IS NOT CONFIGURED HERE');
         return null;
       }
       this.room = new Client(config, {
@@ -486,7 +507,7 @@ export class App {
       });
       return this.room;
     } catch (error) {
-      this.setStatus(`Could not start online play: ${String(error)}`);
+      this.setStatus(`ONLINE PLAY FAILED: ${arcadeCase(String(error))}`);
       return null;
     }
   }
@@ -498,13 +519,13 @@ export class App {
       const code = await client.createRoom(this.selectedMapId, this.playerName());
       this.showLobby(code, true);
     } catch (error) {
-      this.setStatus(String(error));
+      this.setStatus(arcadeCase(String(error)));
     }
   }
 
   private async joinRoom(code: string): Promise<void> {
     if (!code) {
-      this.setStatus('Enter a room code first.');
+      this.setStatus('ENTER A ROOM CODE FIRST');
       return;
     }
     const client = await this.connect();
@@ -513,79 +534,75 @@ export class App {
       await client.joinRoom(code, this.playerName());
       this.showLobby(client.code, false);
     } catch (error) {
-      this.setStatus(String(error));
+      this.setStatus(arcadeCase(String(error)));
     }
   }
 
   private showLobby(code: string, isHost: boolean): void {
-    this.clear();
+    const arcade = this.openScreen('lobby');
     this.audio.setMood('lobby');
 
-    const screen = el('div', 'screen');
-    screen.dataset.screen = 'lobby';
-    screen.append(el('h1', 'brand', 'Lobby'));
+    arcade.appendChild(el('h1', 'screen-title', 'LOBBY'));
 
     const panel = el('div', 'panel');
-    panel.append(el('h2', undefined, 'Room code'));
-    panel.append(el('div', 'code', code));
-    panel.append(
-      el('div', 'invite', `${window.location.origin}/?room=${code}`)
+    panel.appendChild(el('h2', undefined, 'ROOM CODE'));
+    const codePlate = el('div', 'screen-title', code);
+    codePlate.style.textAlign = 'center';
+    panel.appendChild(codePlate);
+    panel.appendChild(
+      el('div', 'hint', arcadeCase(`${window.location.origin}/?room=${code}`))
     );
-    panel.append(
+    panel.appendChild(
       el(
         'div',
-        'map-preview',
+        'hint',
         isHost
-          ? 'Share the link, then press Start. Bots fill any empty slots.'
-          : 'Waiting for the host to start…'
+          ? 'SHARE THE LINK, THEN START. BOTS FILL EMPTY SLOTS.'
+          : 'WAITING FOR THE HOST TO START…'
       )
     );
-    screen.append(panel);
+    arcade.appendChild(panel);
 
     const playersPanel = el('div', 'panel');
-    playersPanel.append(el('h2', undefined, `Players (0/${MAX_HUMANS})`));
-    const list = el('div', 'list is-empty', 'Connecting…');
-    playersPanel.append(list);
-    screen.append(playersPanel);
-    this.lobbyList = { heading: playersPanel.querySelector('h2')!, list };
+    const heading = el('h2', undefined, `PLAYERS 0/${MAX_HUMANS}`);
+    playersPanel.appendChild(heading);
+    const list = el('div', 'list is-empty', 'CONNECTING…');
+    playersPanel.appendChild(list);
+    arcade.appendChild(playersPanel);
+    this.lobbyList = { heading, list };
 
-    const controls = el('div', 'panel');
-    const row = el('div', 'row');
+    const controls = el('div', 'row');
     if (isHost) {
-      row.append(
-        button('Start match', 'primary', () => {
+      controls.appendChild(
+        button('START MATCH', 'primary', () => {
           this.audio.play('menu-accept');
           this.startOnlineMatch();
         })
       );
     }
-    row.append(
-      button('Leave', '', () => {
+    controls.appendChild(
+      button('LEAVE', '', () => {
         this.audio.play('menu-back');
         void this.leaveRoom();
       })
     );
-    controls.append(row);
-    screen.append(controls);
+    arcade.appendChild(controls);
 
-    this.root.append(screen);
     this.refreshLobby(this.members);
   }
-
-  private lobbyList: { heading: HTMLElement; list: HTMLElement } | null = null;
 
   private refreshLobby(members: LobbyMember[]): void {
     this.members = members;
     if (!this.lobbyList) return;
-    this.lobbyList.heading.textContent = `Players (${members.length}/${MAX_HUMANS})`;
+    this.lobbyList.heading.textContent = `PLAYERS ${members.length}/${MAX_HUMANS}`;
     if (members.length === 0) {
       this.lobbyList.list.className = 'list is-empty';
-      this.lobbyList.list.textContent = 'Connecting…';
+      this.lobbyList.list.textContent = 'CONNECTING…';
       return;
     }
     this.lobbyList.list.className = 'list';
     this.lobbyList.list.textContent = members
-      .map((m) => `${m.nickname}${m.isHost ? '  (host)' : ''}`)
+      .map((m) => `${arcadeCase(m.nickname)}${m.isHost ? '  (HOST)' : ''}`)
       .join('\n');
   }
 
@@ -667,13 +684,20 @@ export class App {
     localSlot: number
   ): void {
     const entry = mapById(mapId) ?? MAPS[0];
-    this.clear();
+
+    // A real match takes the whole cabinet: the attract demo must stop so it
+    // is not paying for a second WebGL context and a second bot simulation.
+    this.teardownCabinet();
+    this.teardownMatch();
+    this.root.replaceChildren();
     this.currentMapId = entry.def.id;
 
     const stage = el('div', 'stage');
     const canvas = el('canvas');
     stage.append(canvas);
     this.root.append(stage);
+    // A lighter tube treatment during play: scanlines yes, rolling band no.
+    stage.appendChild(el('div', 'crt crt--game'));
     this.stage = stage;
 
     const hud = new Hud(entry.def);
@@ -705,7 +729,7 @@ export class App {
     );
     this.match = match;
 
-    // The HUD refreshes off the same rAF cadence as the renderer.
+    // The HUD refreshes on the same rAF cadence as the renderer.
     const pump = (): void => {
       if (this.match !== match) return;
       hud.update(match.getState(), localSlot);
@@ -723,16 +747,12 @@ export class App {
     if (this.closeOverlay || !this.stage) return;
     this.closeOverlay = showOverlay(
       this.stage,
-      'Paused',
-      'P to resume · Esc to leave the match.',
+      'PAUSED',
+      'P TO RESUME · ESC TO LEAVE',
       [
+        { label: 'RESUME', primary: true, onSelect: () => this.match?.setPaused(false) },
         {
-          label: 'Resume',
-          primary: true,
-          onSelect: () => this.match?.setPaused(false),
-        },
-        {
-          label: 'Leave match',
+          label: 'LEAVE MATCH',
           onSelect: () => {
             this.campaign = false;
             this.afterMatch = 'menu';
@@ -746,15 +766,15 @@ export class App {
   private openQuitConfirm(): void {
     if (!this.stage || this.closeOverlay) return;
     this.match?.setPaused(true);
-    // setPaused already opened the pause overlay for offline matches.
+    // setPaused already raised the pause overlay for offline matches.
     if (this.closeOverlay) return;
     this.closeOverlay = showOverlay(
       this.stage,
-      'Leave the match?',
-      'Online matches keep running for the other players while you decide.',
+      'LEAVE THE MATCH?',
+      'ONLINE MATCHES KEEP RUNNING FOR THE OTHERS WHILE YOU DECIDE.',
       [
         {
-          label: 'Keep playing',
+          label: 'KEEP PLAYING',
           primary: true,
           onSelect: () => {
             this.closeOverlay?.();
@@ -763,7 +783,7 @@ export class App {
           },
         },
         {
-          label: 'Leave',
+          label: 'LEAVE',
           onSelect: () => {
             this.campaign = false;
             this.afterMatch = 'menu';
@@ -779,12 +799,12 @@ export class App {
 
     const scores = [...state.players]
       .sort((a, b) => b.score - a.score)
-      .map((p) => `${p.name} — ${p.score} pts`);
-    const headline = winner === null ? 'Draw!' : `${state.players[winner].name} wins!`;
+      .map((p) => `${arcadeCase(p.name)} — ${p.score}`);
+    const headline =
+      winner === null ? 'DRAW!' : `${arcadeCase(state.players[winner].name)} WINS!`;
 
-    // Persistence and campaign bookkeeping are best-effort: a failure in here
-    // must never keep the result screen (and the way back to the menu) from
-    // appearing.
+    // Persistence and campaign bookkeeping are best-effort: a failure here must
+    // never keep the result screen (and the way back) from appearing.
     this.afterMatch = 'menu';
     let epilogue = '';
     try {
@@ -809,13 +829,13 @@ export class App {
           const next = this.nextCampaignMap();
           if (next) {
             this.afterMatch = 'campaign-next';
-            epilogue = `Next stop: ${mapOrFirst(next).def.name}.`;
+            epilogue = `NEXT STOP: ${arcadeCase(mapOrFirst(next).def.name)}`;
           } else {
-            epilogue = `Campaign complete — ${this.progress.totalScore} pts!`;
+            epilogue = `CAMPAIGN CLEARED — ${this.progress.totalScore} PTS`;
           }
         } else {
           this.afterMatch = 'campaign-retry';
-          epilogue = 'Try this arena again.';
+          epilogue = 'TRY THIS ARENA AGAIN';
         }
       }
     } catch {
@@ -830,7 +850,7 @@ export class App {
         epilogue,
         [
           {
-            label: this.afterMatch === 'menu' ? 'Back to menu' : 'Continue',
+            label: this.afterMatch === 'menu' ? 'BACK TO MENU' : 'CONTINUE',
             primary: true,
             onSelect: () => this.endMatch(),
           },
@@ -845,7 +865,7 @@ export class App {
   private endMatch(): void {
     const next = this.afterMatch;
     const campaignMapId = this.campaignMapId;
-    this.clear();
+    this.teardownMatch();
     this.audio.stopAmbient();
 
     if (this.room) {
@@ -868,7 +888,7 @@ export class App {
 
   private setStatus(text: string): void {
     this.status = text;
-    const node = this.root.querySelector('.status');
+    const node = this.arcade?.querySelector('.status');
     if (node) node.textContent = text;
   }
 

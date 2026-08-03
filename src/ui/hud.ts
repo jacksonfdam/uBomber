@@ -10,6 +10,7 @@
 import { MATCH_TIME_SECONDS, SUDDEN_DEATH_START } from '../core/constants';
 import type { GameState, MapDef } from '../core/types';
 import { PLAYER_COLORS } from '../render/atlas';
+import { arcadeCase } from './text';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -48,8 +49,14 @@ export class Hud {
     top.append(this.scoreboard, this.clock);
 
     const bottom = el('div', 'hud-bottom');
-    this.caption.innerHTML = `<strong>${def.name}</strong> — ${def.district}`;
-    this.hint.textContent = 'Arrows / WASD to move · Space to drop · P to pause · Esc to leave';
+    // Several districts already contain the arena name ("Gamla Stan (Old
+    // Town)"), so only append it when it adds something.
+    const district = arcadeCase(def.district);
+    const name = arcadeCase(def.name);
+    this.caption.innerHTML = district.startsWith(name)
+      ? `<b>${district}</b>`
+      : `<b>${name}</b> · ${district}`;
+    this.hint.textContent = 'ARROWS/WASD MOVE · SPACE BOMB · P PAUSE · ESC LEAVE';
     bottom.append(this.caption, this.hint);
 
     this.root.append(top, bottom);
@@ -75,7 +82,10 @@ export class Hud {
         this.cards.set(player.id, card);
       }
 
-      const label = player.id === localSlot ? `${player.name} (you)` : player.name;
+      const label =
+        player.id === localSlot
+          ? `${arcadeCase(player.name)} (YOU)`
+          : arcadeCase(player.name);
       if (card.name.textContent !== label) card.name.textContent = label;
 
       const points = String(player.score);
@@ -99,7 +109,7 @@ export class Hud {
     const local = state.players[localSlot];
     if (state.status === 'running' && local && !local.alive) {
       this.hint.textContent =
-        local.lives <= 0 ? 'You are out — Space to skip ahead' : 'Respawning…';
+        local.lives <= 0 ? 'YOU ARE OUT — SPACE TO SKIP AHEAD' : 'RESPAWNING…';
     }
   }
 }
