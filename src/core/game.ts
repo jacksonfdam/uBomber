@@ -145,7 +145,7 @@ export function step(
 }
 
 /** Takes one life; players with lives left queue a respawn at their spawn. */
-function loseLife(state: GameState, p: PlayerState): void {
+function loseLife(_state: GameState, p: PlayerState): void {
   p.alive = false;
   p.lives = Math.max(0, p.lives - 1);
   if (p.lives > 0) p.respawnIn = RESPAWN_DELAY;
