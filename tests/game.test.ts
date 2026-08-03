@@ -26,13 +26,6 @@ const TEST_MAP: MapDef = {
   name: 'Test Arena',
   district: 'Test',
   description: 'Open arena used by the unit tests.',
-  theme: {
-    floor: '#ffffff',
-    wall: '#000000',
-    crate: '#888888',
-    flame: '#ff0000',
-    accent: '#00ff00',
-  },
   grid: [
     '###############',
     '#1...........2#',

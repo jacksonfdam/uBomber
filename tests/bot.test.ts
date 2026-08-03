@@ -1,16 +1,15 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BotController, dangerMap } from '../src/ai/bot';
 import { BOMB_FUSE, TICK_DT } from '../src/core/constants';
 import { createGame, step, tileOf } from '../src/core/game';
 import type { GameState, MapDef, PlayerInput } from '../src/core/types';
 import { IDLE_INPUT } from '../src/core/types';
+import { mapById } from '../src/maps';
 
 function loadMap(id: string): MapDef {
-  return JSON.parse(
-    readFileSync(join(__dirname, '..', 'maps', `${id}.json`), 'utf8')
-  );
+  const entry = mapById(id);
+  if (!entry) throw new Error(`unknown map ${id}`);
+  return entry.def;
 }
 
 /** Crate-free arena so escape routes always exist. */
@@ -19,13 +18,6 @@ const OPEN_MAP: MapDef = {
   name: 'Open Arena',
   district: 'Test',
   description: 'Crate-free arena used by the bot tests.',
-  theme: {
-    floor: '#ffffff',
-    wall: '#000000',
-    crate: '#888888',
-    flame: '#ff0000',
-    accent: '#00ff00',
-  },
   grid: [
     '###############',
     '#1...........2#',

@@ -28,13 +28,13 @@ describe('room codes', () => {
 describe('invite links', () => {
   it('builds and parses round-trip', () => {
     const url = inviteUrl('https://ubomber.example.com', 'ABCDEF');
-    expect(url).toBe('https://ubomber.example.com/game/?room=ABCDEF');
+    expect(url).toBe('https://ubomber.example.com/?room=ABCDEF');
     expect(roomCodeFromUrl(url)).toBe('ABCDEF');
   });
 
   it('normalizes lowercase codes and rejects junk', () => {
-    expect(roomCodeFromUrl('https://x.test/game/?room=abcdef')).toBe('ABCDEF');
-    expect(roomCodeFromUrl('https://x.test/game/?room=nope')).toBeNull();
-    expect(roomCodeFromUrl('https://x.test/game/')).toBeNull();
+    expect(roomCodeFromUrl('https://x.test/?room=abcdef')).toBe('ABCDEF');
+    expect(roomCodeFromUrl('https://x.test/?room=nope')).toBeNull();
+    expect(roomCodeFromUrl('https://x.test/')).toBeNull();
   });
 });
