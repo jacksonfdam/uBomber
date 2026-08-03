@@ -22,6 +22,14 @@ const HUMANS: RosterEntry[] = [
   { kind: 'human', name: 'F' },
 ];
 
+/**
+ * These sweeps simulate whole matches across every arena, which is far more
+ * work than a unit test. They get explicit timeouts rather than a global
+ * `testTimeout` bump so a genuinely hung test still fails fast.
+ */
+const SWEEP_TIMEOUT = 30_000;
+const MATCH_SWEEP_TIMEOUT = 120_000;
+
 describe('fuzz', () => {
   it('random inputs never break an invariant on any map', () => {
     const TICKS = 1200;
@@ -41,7 +49,7 @@ describe('fuzz', () => {
         }
       }
     }
-  });
+  }, SWEEP_TIMEOUT);
 
   it('bots never break an invariant and every match resolves', () => {
     const roster: RosterEntry[] = [
@@ -73,7 +81,7 @@ describe('fuzz', () => {
         expect(state.status, `${entry.def.id} seed ${seed} never finished`).toBe('finished');
       }
     }
-  });
+  }, MATCH_SWEEP_TIMEOUT);
 
   it('spamming bombs never exceeds the bomb cap', () => {
     const rng = makeRng(99);
