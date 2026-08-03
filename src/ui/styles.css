@@ -1,0 +1,636 @@
+/*
+ * uBomber interface — an arcade cabinet, not a web form.
+ *
+ * The palette is taken from the game itself: the flame gold and orange the
+ * bombs actually burn with, the six player slot colours, and the near-black
+ * blue the bomb bodies are shaded from. Hard edges everywhere (no rounded
+ * corners, no soft shadows), one pixel display face, and a CRT overlay on top
+ * of live attract-mode play.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Cabinet */
+  --bg: #0a0810;
+  --bg-lift: #150f1e;
+  --panel: rgba(12, 9, 18, 0.82);
+  --panel-solid: #120d1c;
+
+  /* Flame, straight from the bombs */
+  --gold: #ffc63f;
+  --gold-lit: #fff0a8;
+  --gold-deep: #c07a12;
+  --orange: #ff8a3c;
+
+  /* Player slots, reused as UI accents */
+  --p1: #4f9dde;
+  --p2: #e2574c;
+  --p3: #57b26a;
+  --p4: #e0b34c;
+  --p5: #9a6dd7;
+  --p6: #5bc8c4;
+
+  --cyan: #5bc8c4;
+  --text: #f4ecd8;
+  --dim: #8b809c;
+  --line: #3a2f4a;
+
+  --display: 'Press Start 2P', 'Courier New', monospace;
+  --body: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--display);
+  overflow: hidden;
+  -webkit-font-smoothing: none;
+  text-rendering: optimizeSpeed;
+}
+
+#app {
+  position: relative;
+  height: 100%;
+}
+
+::selection {
+  background: var(--gold);
+  color: #1a1004;
+}
+
+/* --------------------------------------------------------------- cabinet */
+
+/* Live attract-mode match, or the real match stage. */
+.attract,
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.attract canvas,
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The attract match sits behind the menu, dimmed and pushed back. */
+.attract {
+  filter: saturate(0.78) brightness(0.44) blur(1px);
+  transform: scale(1.06);
+}
+
+/* Scanlines, phosphor bloom and a tube vignette over everything. */
+.crt {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.26) 0px,
+      rgba(0, 0, 0, 0.26) 1px,
+      rgba(0, 0, 0, 0) 1px,
+      rgba(0, 0, 0, 0) 3px
+    ),
+    radial-gradient(120% 90% at 50% 50%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.72) 100%);
+}
+
+.crt::after {
+  /* A slow bright band rolling down the tube. */
+  content: '';
+  position: absolute;
+  inset: -20% 0 auto 0;
+  height: 24%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 214, 120, 0.035) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: roll 7.5s linear infinite;
+}
+
+@keyframes roll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(520%);
+  }
+}
+
+/*
+ * During play the tube backs off: scanlines and vignette stay for the cabinet
+ * feel, the rolling band goes, because a moving highlight over the arena reads
+ * as a gameplay event that is not happening.
+ */
+.crt--game {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.16) 0px,
+      rgba(0, 0, 0, 0.16) 1px,
+      rgba(0, 0, 0, 0) 1px,
+      rgba(0, 0, 0, 0) 3px
+    ),
+    radial-gradient(130% 100% at 50% 50%, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+.crt--game::after {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- screen */
+
+.arcade {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.5rem, 1.6vmin, 1.2rem);
+  padding: clamp(1rem, 3vmin, 2.5rem);
+  overflow-y: auto;
+  text-align: center;
+}
+
+.marquee {
+  display: block;
+  line-height: 0;
+}
+
+.logo {
+  display: block;
+  width: min(78vw, 30rem);
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.tagline {
+  font-size: clamp(0.44rem, 1.2vmin, 0.6rem);
+  letter-spacing: 0.24em;
+  color: var(--gold-deep);
+  margin-top: 0.4rem;
+}
+
+.arena-plate {
+  font-size: clamp(0.4rem, 1vmin, 0.5rem);
+  letter-spacing: 0.2em;
+  color: var(--dim);
+}
+
+.arena-plate b {
+  color: var(--cyan);
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------------ menu */
+
+.menu {
+  list-style: none;
+  width: min(92vw, 34rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-top: 0.6rem;
+}
+
+.menu-rule {
+  height: 2px;
+  background: var(--line);
+  margin: 0.45rem 0;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  font-size: clamp(0.5rem, 1.35vmin, 0.72rem);
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: rgba(8, 6, 13, 0.62);
+  text-align: left;
+  transition: color 90ms steps(2), background 90ms steps(2);
+}
+
+.item .caret {
+  color: var(--gold);
+  opacity: 0;
+}
+
+.item .value {
+  color: var(--cyan);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+
+.item.is-active {
+  background: rgba(255, 198, 63, 0.1);
+  border-color: var(--gold);
+  color: var(--gold-lit);
+}
+
+.item.is-active .caret {
+  opacity: 1;
+  animation: blink 0.7s steps(1) infinite;
+}
+
+.item.is-active .value {
+  color: var(--gold);
+}
+
+.item.is-disabled {
+  color: var(--dim);
+  cursor: default;
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+/* Inline editable values (nickname, room code). */
+.item input[type='text'] {
+  font-family: var(--display);
+  font-size: 1em;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--line);
+  padding: 0.15rem 0.2rem;
+  width: 8.5em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.item input[type='text']::placeholder {
+  color: var(--line);
+}
+
+.item input[type='text']:focus {
+  outline: none;
+  border-bottom-color: var(--gold);
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.hint {
+  font-size: clamp(0.36rem, 0.95vmin, 0.46rem);
+  letter-spacing: 0.18em;
+  color: var(--dim);
+  margin-top: 0.9rem;
+  line-height: 2.1;
+}
+
+.hint b {
+  color: var(--gold);
+  font-weight: 400;
+}
+
+.insert {
+  font-size: clamp(0.42rem, 1.1vmin, 0.55rem);
+  letter-spacing: 0.22em;
+  color: var(--orange);
+  animation: blink 1.1s steps(1) infinite;
+}
+
+.status {
+  min-height: 1.4rem;
+  font-size: clamp(0.38rem, 1vmin, 0.48rem);
+  letter-spacing: 0.14em;
+  color: var(--p2);
+  line-height: 1.8;
+  max-width: 34rem;
+}
+
+/* --------------------------------------------------------------- panels */
+
+.panel {
+  width: min(92vw, 42rem);
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--line);
+  padding: clamp(0.9rem, 2.4vmin, 1.6rem);
+  text-align: left;
+}
+
+.panel h2 {
+  font-size: clamp(0.55rem, 1.5vmin, 0.78rem);
+  letter-spacing: 0.16em;
+  color: var(--gold);
+  margin-bottom: 0.9rem;
+}
+
+.screen-title {
+  font-size: clamp(0.9rem, 3.2vmin, 1.6rem);
+  letter-spacing: 0.16em;
+  color: var(--gold);
+  text-shadow: 3px 3px 0 var(--gold-deep);
+  margin-bottom: 0.4rem;
+}
+
+.list {
+  font-size: clamp(0.42rem, 1.1vmin, 0.56rem);
+  line-height: 2.4;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.list.is-empty {
+  color: var(--dim);
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr auto;
+  gap: 0.6rem;
+  padding: 0.28rem 0;
+  border-bottom: 2px solid rgba(58, 47, 74, 0.5);
+  font-size: clamp(0.42rem, 1.1vmin, 0.56rem);
+  letter-spacing: 0.08em;
+}
+
+.rank-row .pos {
+  color: var(--gold);
+}
+
+.rank-row .pts {
+  color: var(--cyan);
+}
+
+/* Longer prose (credits) drops to a readable face. */
+.prose {
+  font-family: var(--body);
+  font-size: 0.86rem;
+  line-height: 1.65;
+  color: #cfc6dd;
+  letter-spacing: 0;
+}
+
+.prose p {
+  margin-bottom: 0.7rem;
+}
+
+.prose strong {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.prose a {
+  color: var(--cyan);
+}
+
+/* -------------------------------------------------------------- controls */
+
+button {
+  font-family: var(--display);
+  font-size: clamp(0.46rem, 1.25vmin, 0.62rem);
+  letter-spacing: 0.12em;
+  color: var(--text);
+  background: var(--bg-lift);
+  border: 2px solid var(--line);
+  padding: 0.7rem 1.2rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: none;
+}
+
+button:hover:not(:disabled),
+button:focus-visible {
+  outline: none;
+  background: var(--gold);
+  border-color: var(--gold-lit);
+  color: #1a1004;
+}
+
+button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+}
+
+button:disabled {
+  color: var(--line);
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--gold);
+  border-color: var(--gold-lit);
+  color: #1a1004;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--gold-lit);
+}
+
+.row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ------------------------------------------------------------- overlays */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 4, 10, 0.8);
+}
+
+.overlay-card {
+  background: var(--panel-solid);
+  border: 2px solid var(--gold);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--gold-deep);
+  padding: 1.6rem 2rem;
+  max-width: min(34rem, 90vw);
+  text-align: center;
+}
+
+.overlay-card h2 {
+  font-size: clamp(0.8rem, 2.6vmin, 1.2rem);
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  text-shadow: 3px 3px 0 var(--gold-deep);
+  margin-bottom: 0.8rem;
+}
+
+.overlay-card p {
+  font-size: clamp(0.4rem, 1.05vmin, 0.5rem);
+  letter-spacing: 0.1em;
+  line-height: 2;
+  color: var(--dim);
+}
+
+.result-scores {
+  margin-top: 1rem;
+  font-size: clamp(0.42rem, 1.1vmin, 0.55rem);
+  line-height: 2.2;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.overlay-actions {
+  margin-top: 1.3rem;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------ hud */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(0.5rem, 1.5vmin, 1.1rem);
+}
+
+.hud-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.scoreboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.score-card {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(10, 8, 16, 0.8);
+  border: 2px solid var(--line);
+  padding: 0.34rem 0.5rem;
+}
+
+.score-card.is-out {
+  opacity: 0.4;
+}
+
+.score-chip {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: 0 0 auto;
+}
+
+.score-name {
+  font-size: clamp(0.36rem, 0.95vmin, 0.46rem);
+  letter-spacing: 0.08em;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-points {
+  font-size: clamp(0.4rem, 1vmin, 0.5rem);
+  color: var(--gold);
+}
+
+.score-hearts {
+  display: flex;
+  gap: 2px;
+}
+
+.heart {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--p2);
+  clip-path: polygon(50% 100%, 0% 38%, 10% 12%, 30% 8%, 50% 26%, 70% 8%, 90% 12%, 100% 38%);
+}
+
+.heart.is-spent {
+  background: var(--line);
+}
+
+.hud-clock {
+  background: rgba(10, 8, 16, 0.8);
+  border: 2px solid var(--line);
+  padding: 0.34rem 0.6rem;
+  font-size: clamp(0.6rem, 1.7vmin, 0.9rem);
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+
+.hud-clock.is-urgent {
+  color: var(--orange);
+  border-color: var(--orange);
+  animation: blink 0.5s steps(1) infinite;
+}
+
+.hud-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.hud-map,
+.hud-hint {
+  font-size: clamp(0.32rem, 0.85vmin, 0.42rem);
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  line-height: 1.8;
+}
+
+.hud-map b {
+  color: var(--cyan);
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------- a11y bits */
+
+@media (prefers-reduced-motion: reduce) {
+  .crt::after,
+  .item.is-active .caret,
+  .insert,
+  .hud-clock.is-urgent {
+    animation: none;
+  }
+}

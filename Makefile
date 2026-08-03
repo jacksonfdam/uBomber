@@ -1,24 +1,35 @@
 # Developer entry points. See docs/LOCAL_DEVELOPMENT.md for details.
 
-.PHONY: install test typecheck build db-start db-stop db-reset web-up web-down
+.PHONY: install dev build preview test typecheck check db-start db-stop db-reset
 
-## Install game dependencies
+## Install dependencies
 install:
-	cd game && npm install
+	npm install
 
-## Run the unit test suite (core simulation, maps, bots, protocol)
-test:
-	cd game && npm test
+## Run the dev server (prints a local URL)
+dev:
+	npm run dev
 
-## Typecheck all TypeScript
-typecheck:
-	cd game && npm run typecheck
-
-## Compile GodotJS scripts and bundle the network layer
+## Typecheck and produce the production build in dist/
 build:
-	cd game && npm run build && npm run bundle:net
+	npm run build
 
-## Start the local Supabase stack (Docker, via Supabase CLI)
+## Serve the production build locally
+preview:
+	npm run preview
+
+## Run the test suite (sim, maps, bots, protocol, determinism, fuzz, perf)
+test:
+	npm test
+
+## Typecheck without emitting
+typecheck:
+	npm run typecheck
+
+## Everything CI runs
+check: typecheck test build
+
+## Start the local Supabase stack (Docker, via the Supabase CLI)
 db-start:
 	supabase start
 
@@ -29,10 +40,3 @@ db-stop:
 ## Reset the local database and re-apply migrations
 db-reset:
 	supabase db reset
-
-## Serve the landing page + exported game at http://localhost:8080
-web-up:
-	docker compose up -d web
-
-web-down:
-	docker compose down

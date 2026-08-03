@@ -2,24 +2,15 @@
 node_modules/
 
 # Build output
-game/.godot/
-
-# Audio assets are bring-your-own (commercial-game sound packs cannot be
-# redistributed here) — see game/assets/audio/README.md
-game/assets/audio/*
-!game/assets/audio/README.md
-
-# Local sound pack folders and AI-generation workspaces
-Bomberman*Sound*Pack*/
-ElevenLabs*/
-web/public/game/*
-!web/public/game/README.md
+dist/
 
 # Environment
 .env
 .env.local
 *.local.json
-web/public/config.json
+
+# Runtime Supabase config (served next to the build; see public/config.json.example)
+public/config.json
 
 # Supabase local state
 supabase/.branches/

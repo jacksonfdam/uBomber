@@ -1,48 +1,39 @@
 # Deployment
 
-Production topology: **Vercel** serves the static site (landing page +
-exported game), **Supabase** provides the realtime backend. Both have free
-tiers that comfortably run this game.
+Production topology: **Vercel** builds and serves the static site, **Supabase**
+provides the realtime backend. Both have free tiers that comfortably run this
+game.
 
-## Building the web export
+There is no export step and no art pipeline — `vercel.json` points Vercel at
+`npm run build`, which typechecks and emits `dist/`.
 
-1. Install a [GodotJS](https://godotjs.github.io/) editor build (Godot 4.x
-   with the GodotJS module) and its **web export templates** (Editor →
-   Manage Export Templates, or download from the GodotJS releases page).
-2. Compile the scripts first:
+## Vercel (hosting)
 
-   ```bash
-   cd game
-   npm install
-   npm run build        # TypeScript → .godot/GodotJS/ (engine-side mirror)
-   npm run bundle:net   # network layer + supabase-js → web/public/game/net-bundle.js
-   ```
+```bash
+vercel          # preview deployment
+vercel --prod   # production
+```
 
-3. Export with the bundled **Web** preset (writes to `web/public/game/`):
-
-   ```bash
-   # GUI: Project > Export… > Web > Export Project
-   # or headless:
-   godot --headless --path game --export-release "Web" ../web/public/game/index.html
-   ```
+`vercel.json` sets the framework to Vite, the output to `dist/`, immutable
+caching on hashed assets, and `no-store` on `/config.json` so a backend change
+takes effect on the next page load.
 
 ## Supabase (backend)
 
 ### Via the Vercel Marketplace (recommended)
 
 ```bash
-vercel link                            # link the repo to a Vercel project
-vercel integration add supabase       # provision Supabase, wire env vars
+vercel link                        # link the repo to a Vercel project
+vercel integration add supabase    # provision Supabase, wire env vars
 ```
 
 ### Or a standalone Supabase project
 
-Create a project at [database.new](https://database.new), then apply the
-schema:
+Create a project at [database.new](https://database.new), then apply the schema:
 
 ```bash
 supabase link --project-ref <YOUR-PROJECT-REF>
-supabase db push                       # applies supabase/migrations/
+supabase db push                   # applies supabase/migrations/
 ```
 
 Schedule room garbage collection (SQL editor or a migration):
@@ -56,44 +47,27 @@ select cron.schedule('cleanup-stale-rooms', '0 * * * *',
 
 ## Runtime configuration
 
-The deployed game reads `/config.json` at runtime — no rebuild needed to
-change backends:
+The deployed game reads `/config.json` at runtime — no rebuild needed to change
+backends:
 
 ```bash
-cp web/public/config.json.example web/public/config.json
+cp public/config.json.example public/config.json
 # fill in supabaseUrl + supabaseAnonKey (Dashboard → Settings → API)
 ```
 
-The anon key is public by design; the schema's row-level-security policies
-are what protect the data (rooms are anonymous, throwaway rows).
+The anon key is public by design; the schema's row-level-security policies are
+what protect the data (rooms are anonymous, throwaway rows).
 
-> `web/public/config.json` is gitignored. For CI-driven deploys, generate it
-> during the deploy step from environment variables instead of committing it.
+> `public/config.json` is gitignored. For CI-driven deploys, generate it during
+> the build step from environment variables instead of committing it.
 
-## Vercel (hosting)
-
-`vercel.json` already configures everything static hosting needs, including
-the `Cross-Origin-Opener-Policy`/`Cross-Origin-Embedder-Policy` headers that
-Godot web exports require:
-
-```bash
-vercel          # preview deployment
-vercel --prod   # production
-```
-
-The project is a plain static deploy of `web/public` — there is no build
-step on Vercel's side, so deploys are instant. A typical release is:
-
-```bash
-cd game && npm run build && npm run bundle:net
-godot --headless --path game --export-release "Web" ../web/public/game/index.html
-cd .. && vercel --prod
-```
+Without a `config.json` the game still works: solo play and the campaign are
+unaffected, and the online buttons report that no backend is configured.
 
 ## Checklist
 
-- [ ] Web export present in `web/public/game/`
-- [ ] `web/public/config.json` filled with the production Supabase URL + anon key
+- [ ] `npm run build` passes locally (CI runs it too)
+- [ ] `public/config.json` generated with the production Supabase URL + anon key
 - [ ] Migrations applied (`supabase db push`)
 - [ ] `cleanup-stale-rooms` scheduled with pg_cron
-- [ ] `vercel --prod` from the repo root
+- [ ] `vercel --prod`
