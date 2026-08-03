@@ -1,28 +1,30 @@
 # Architecture
 
-uBomber is split into four layers with strict boundaries, so the gameplay
-logic stays testable without an engine and the engine stays swappable.
+uBomber is a static web app: a deterministic TypeScript simulation with a
+Three.js renderer on top. The layers have strict boundaries, so the gameplay
+logic stays testable in Node and the presentation stays replaceable.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ web/            Landing page + hosting shell (Vercel)   │
-│                 Serves the exported game + config.json  │
+│ src/ui          Menu, lobby, HUD, rankings (DOM)        │
+│ src/app.ts      Screen router + match lifecycle         │
 ├─────────────────────────────────────────────────────────┤
-│ game/src/godot  GodotJS integration layer               │
-│                 Scenes, input, rendering, menu/lobby UI │
+│ src/render      Three.js: procedural art, VFX, post     │
+│ src/audio       Web Audio: synthesized sfx and music    │
+│ src/match.ts    Fixed-step pump + state→presentation    │
 ├─────────────────────────────────────────────────────────┤
-│ game/src/net    Multiplayer (Supabase Realtime)         │
-│ game/src/ai     Bot opponents                           │
+│ src/net         Multiplayer (Supabase Realtime)         │
+│ src/ai          Bot opponents                           │
 ├─────────────────────────────────────────────────────────┤
-│ game/src/core   Pure TypeScript simulation              │
-│                 No engine imports. Fully unit-tested.   │
+│ src/core        Pure TypeScript simulation              │
+│                 No renderer imports. Fully unit-tested. │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## game/src/core — the simulation
+## src/core — the simulation
 
-The entire game — movement, bombs, chain explosions, power-ups, win
-conditions — is a pure, deterministic state machine:
+The entire game — movement, bombs, chain explosions, power-ups, sudden death,
+win conditions — is a pure, deterministic state machine:
 
 - `createGame(mapDef, roster, seed)` builds a `GameState`.
 - `step(state, inputs, dt)` advances it one fixed tick (30 Hz).
@@ -30,65 +32,102 @@ conditions — is a pure, deterministic state machine:
   mulberry32 PRNG whose state lives inside `GameState`, so two peers with the
   same seed produce identical arenas.
 
-Because the core has zero engine dependencies it runs in Node, which is what
-`game/tests/` exercises (59+ tests: physics, blasts, chains, maps, bots,
-protocol).
+`MapDef` is purely structural. Nothing in `core` knows a colour exists.
 
-## game/src/ai — bots
+Because the core has zero rendering dependencies it runs in Node, which is what
+`tests/` exercises: gameplay rules, map validation, bots, wire protocol, plus
+determinism, fuzz and performance budgets.
 
-`BotController` produces a regular `PlayerInput` each tick, so bots and
-humans are indistinguishable to the simulation. Bots build a danger map
-(seconds-until-blast per tile), flee threatened tiles via BFS, drop bombs
-when a crate or enemy is in range *and* an escape route exists, and otherwise
-hunt power-ups, crates and enemies in that order.
+## src/ai — bots
 
-## game/src/net — multiplayer
+`BotController` produces a regular `PlayerInput` each tick, so bots and humans
+are indistinguishable to the simulation. Bots build a danger map
+(seconds-until-blast per tile), flee threatened tiles via BFS, drop bombs when a
+crate or enemy is in range *and* an escape route exists, and otherwise hunt
+power-ups, crates and enemies in that order.
+
+## src/net — multiplayer
 
 Host-authoritative topology over Supabase Realtime (see
 [MULTIPLAYER.md](MULTIPLAYER.md)). Postgres stores only the invite-code
-registry; all gameplay traffic is broadcast channels.
+registry; all gameplay traffic is broadcast channels. The Supabase client is
+dynamically imported, so a solo player never downloads it.
 
-## game/src/godot — GodotJS layer
+## src/render — the renderer
 
-Thin scripts attached to Godot nodes:
+Everything visible is generated at match start from the map's `MapTheme`. The
+repository ships **no image assets**.
 
-- `main.ts` — menu, lobby and match lifecycle (attached to `main.tscn`).
-- `match_view.ts` — steps the simulation on a fixed-tick accumulator and
-  renders `GameState` with `_draw()` primitives (no art assets needed).
-- `maps.ts` / `net_bridge.ts` — resource loading and the require-bridge to
-  the bundled network layer.
+| Module | Responsibility |
+| --- | --- |
+| `theme.ts` | The `MapTheme` contract: tileset, palettes, sky, skyline, light, weather, grading, music |
+| `textures.ts` | Ten floor generators and five block-face families, painted on canvas and tiled seamlessly |
+| `sprites.ts` | The parametric bomber: a pose table (lean, squash, stride, arms, eyes, hat) plus one draw routine |
+| `atlas.ts` | Composes blocks, bombs, blasts, power-ups, decor and all six character colour sets into one sheet |
+| `backdrop.ts` | Sky gradient plus two procedural skyline bands |
+| `vfx.ts` | One fixed-size particle pool: blasts, splinters, dust, sparkles, weather |
+| `post.ts` | Bloom, per-map colour grade, vignette, grain, aberration — all switchable |
+| `board.ts` | The scene: camera, floor shader, sprite batch, shake |
 
-Scenes attach the `.ts` sources directly (GodotJS convention); `tsc`
-compiles them into the `.godot/GodotJS/` mirror, which the engine loads and
-the exporter packs. `typings/godot.d.ts` is a loose stub so the project
-typechecks without an editor; the GodotJS editor can generate exact typings
-that replace it.
+### Draw-call budget
 
-Note on npm packages: GodotJS does not resolve `node_modules` at runtime, so
-`npm run bundle:net` packs the network layer (including
-`@supabase/supabase-js`) into an IIFE (`globalThis.UBomberNet`) emitted to
-`web/public/game/net-bundle.js`. The web export loads it with a `<script>`
-tag injected via the preset's `html/head_include`, and
-`src/godot/net_bridge.ts` picks it up from the global.
+```
+1  backdrop sky          1  floor plane (shader-tiled)
+2  skyline bands         1  sprite batch (blocks + entities + players)
+1  particle points       +  post-processing passes
+```
+
+The sprite batch is a single `InstancedMesh`. Instances are filled row by row
+and instance order *is* draw order, so that alone produces a correct painter's
+y-sort across blocks, bombs and characters — no per-frame sorting, no depth
+tricks, no extra passes.
+
+Every sprite quad follows one convention: 1.5× TILE, horizontally centred on its
+tile and bottom-aligned to the tile's bottom edge.
+
+### Performance
+
+Generation happens once per match (the atlas costs single-digit milliseconds)
+and never per frame. The post stack is switchable from the menu; with it off the
+arena is a plain forward render of the handful of draws above.
+
+## src/audio — sound
+
+Three buses (sfx / ambient / music) over the Web Audio API. Effects are
+synthesized from filtered noise bursts and oscillator envelopes, and panned by
+the board column they happen on. Each map gets an ambient bed built from layered
+filtered noise plus a generative music track driven by its own scale, root, tempo
+and brightness. There are no recordings and no sample libraries.
+
+## src/match.ts — the match runtime
+
+Owns the authoritative simulation in solo and host modes; in guest mode it draws
+the latest host snapshot and reports local input upward. It derives all
+presentation from *observed state changes* — a bomb that vanished means a blast,
+a crate that turned to floor means splinters — rather than from hooks inside the
+simulation.
+
+That is deliberate and load-bearing: the same code path lights up a locally
+simulated match and a stream of host snapshots, and nothing render-side can
+perturb the deterministic state that guests reconcile to.
 
 ## Data
 
-- **Maps** are JSON (`game/maps/*.json`): a 15×13 character grid plus theme
-  colors and metadata. Format spec in [MAPS.md](MAPS.md).
+- **Maps** are TypeScript modules (`src/maps/*.ts`), each exporting a `MapDef`
+  grid and a `MapTheme`. Format spec in [MAPS.md](MAPS.md).
 - **Rooms** are a single Postgres table with RLS enabled
   (`supabase/migrations/`).
 - **Scores** live inside the simulation (`PlayerState.score`) with blast
-  attribution via `FlameState.owner`, so multiplayer guests see them through
-  ordinary snapshots.
-- **Campaign progress and rankings** are local JSON under `user://`
-  (IndexedDB in web builds), managed by `game/src/godot/persist.ts`. An
-  online Supabase leaderboard is a natural follow-up but is not implemented.
+  attribution via `FlameState.owner`, so guests see them through ordinary
+  snapshots.
+- **Campaign progress, rankings, nickname and quality settings** are in
+  `localStorage`, managed by `src/persist.ts`. An online Supabase leaderboard is
+  a natural follow-up but is not implemented.
 
 ## Platform notes
 
-- Online multiplayer requires browser APIs (`fetch`, `WebSocket`) and is
-  therefore available in **web builds**. Native/editor builds play solo vs
-  bots.
-- Godot 4 web exports need cross-origin isolation; both `vercel.json` and
-  `ops/nginx.conf` set `Cross-Origin-Opener-Policy: same-origin` and
-  `Cross-Origin-Embedder-Policy: require-corp` on `/game/*`.
+- Online multiplayer needs a `/config.json` with Supabase credentials served
+  next to the build. Without it the online buttons say so and solo play keeps
+  working.
+- There is no cross-origin isolation requirement any more — that was a Godot web
+  export constraint. This is an ordinary Vite build.

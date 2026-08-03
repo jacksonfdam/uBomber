@@ -1,85 +1,106 @@
 # Local development
 
-Everything runs locally and free: the Supabase stack in Docker, the game
-served by nginx in Docker, tests in Node.
+Everything runs locally and free: the game on the Vite dev server, the Supabase
+stack in Docker, tests in Node.
 
 ## Prerequisites
 
 - Node.js 22+
-- Docker (Desktop or Engine)
-- [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`)
-- A [GodotJS](https://godotjs.github.io/) editor build (Godot 4.x with the
-  GodotJS module) — only needed to run/export the game itself, not for the
-  simulation tests
+- Docker (Desktop or Engine) — only for the Supabase stack
+- [Supabase CLI](https://supabase.com/docs/guides/cli)
+  (`brew install supabase/tap/supabase`) — only for multiplayer
+
+Solo play and the whole test suite need nothing but Node.
 
 ## 1. Install and test
 
 ```bash
-make install   # npm install in game/
-make test      # 60+ unit tests: simulation, maps, bots, protocol
+make install     # npm install
+make test        # simulation, maps, bots, protocol, determinism, fuzz, perf
 make typecheck
 ```
 
 The core simulation is pure TypeScript, so you can iterate on gameplay with
-tests alone — no engine required.
+tests alone.
 
-## 2. Compile the scripts
-
-```bash
-make build     # tsc → game/.godot/GodotJS/ + esbuild bundle of the net layer
-```
-
-Scenes reference the `.ts` files; the engine runs the compiled mirror in
-`game/.godot/GodotJS/`. Re-run after every TypeScript change (or keep
-`npx tsc -w` running).
-
-## 3. Backend (Supabase in Docker)
+## 2. Run the game
 
 ```bash
-make db-start        # supabase start — full local stack in Docker
+make dev         # vite dev server, prints a local URL
 ```
 
-The CLI prints your local `API URL` and `anon key` (also available via
+That is the full experience: ten arenas, campaign, bots, rankings. Hot module
+reload applies renderer and theme changes immediately — tweak a colour in
+`src/maps/<id>.ts` and the arena repaints on the next match.
+
+## 3. Backend (only needed for online play)
+
+```bash
+make db-start    # supabase start — full local stack in Docker
+```
+
+The CLI prints your local `API URL` and `anon key` (also available from
 `supabase status`). Migrations in `supabase/migrations/` are applied
 automatically; `make db-reset` re-applies them from scratch.
 
-## 4. Run the game
+Point the game at it:
 
-### In the editor (solo vs bots)
+```bash
+cp public/config.json.example public/config.json
+# fill in the API URL + anon key from `supabase status`
+# (use http://<your-LAN-IP>:54321 if friends on your network will join)
+```
 
-Open `game/` in the GodotJS editor and press Play. Online play is
-unavailable in native builds (it needs browser `fetch`/`WebSocket`); solo vs
-bots works fully.
+Vite serves `public/` at the site root, so the dev server picks `/config.json`
+up with no restart. Create a room in one tab, join from another with the invite
+link, and you have a full multiplayer match against the bots on localhost.
 
-### Web build (full experience, including multiplayer)
+## 4. Production build
 
-1. Export the Web build (see [DEPLOYMENT.md](DEPLOYMENT.md#building-the-web-export));
-   it lands in `web/public/game/`.
-2. Point the game at your local Supabase:
+```bash
+make build       # tsc --noEmit && vite build → dist/
+make preview     # serve dist/ locally
+```
 
-   ```bash
-   cp web/public/config.json.example web/public/config.json
-   # fill in the API URL + anon key from `supabase status`
-   # (use http://<your-LAN-IP>:54321 if friends on your network will join)
-   ```
+## Working on the renderer
 
-3. Serve it:
+There are no art assets to rebuild — every surface, block, bomb, blast and
+character is painted from the map's `MapTheme` at match start. The useful entry
+points are:
 
-   ```bash
-   make web-up   # nginx in Docker at http://localhost:8080
-   ```
+- `src/render/theme.ts` — the contract every map fills in.
+- `src/render/textures.ts` — the ten floor generators and five face families.
+- `src/render/sprites.ts` — the character pose table and draw routine.
+- `src/render/atlas.ts` — how the sheet is composed.
 
-nginx adds the same cross-origin-isolation headers as production, so the
-local build behaves exactly like the Vercel deployment. Create a room in one
-browser tab, join from another with the invite link, and you have a full
-multiplayer match against the bots on localhost.
+To inspect the generated sheet directly, build it from the browser console:
+
+```js
+const atlas = await import('/src/render/atlas.ts');
+const tex = await import('/src/render/textures.ts');
+const maps = await import('/src/maps/index.ts');
+const entry = maps.MAPS[0];
+const sheet = atlas.buildAtlas(entry.theme, tex.generateMaterials(entry.theme, 1), 1);
+document.body.replaceChildren(sheet.canvas);
+```
+
+If the arena looks wrong, check the console first: a shader that fails to
+compile shows up as `THREE.WebGLProgram: Shader Error` with the GLSL line
+number, and the affected mesh simply does not draw.
 
 ## Repository layout
 
 ```
-game/            GodotJS project (project.godot, scenes, maps, src, tests)
+index.html       Vite entry point
+src/core         Pure simulation (no renderer imports)
+src/ai           Bots
+src/net          Supabase Realtime multiplayer
+src/maps         Ten arenas: grid + theme, one module each
+src/render       Three.js renderer, procedural art, VFX, post
+src/audio        Web Audio synthesis
+src/ui           Menu, lobby, HUD (DOM)
+tests/           Vitest suites
+public/          Served at the site root (config.json lives here)
 supabase/        Database migrations + local stack config
-web/             Static hosting shell (landing page, config, export target)
-ops/             nginx config for the local Docker web server
 docs/            You are here
 ```

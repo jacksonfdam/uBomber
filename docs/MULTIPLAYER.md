@@ -50,16 +50,15 @@ match ends:
   send {type:'game_over', winner} ─────►  show result
 ```
 
-Protocol types live in `game/src/net/protocol.ts` (versioned via
+Protocol types live in `src/net/protocol.ts` (versioned via
 `PROTOCOL_VERSION`).
 
 ## Invite links
 
 - Codes are 6 characters from an unambiguous alphabet (no `0/O`, `1/I/L`),
   e.g. `K7WQ2R`.
-- Invite URL: `https://<host>/game/?room=K7WQ2R`. The landing page and the
-  game both parse `?room=` — an invited friend clicks the link, types a
-  nickname, and presses **Join room**.
+- Invite URL: `https://<host>/?room=K7WQ2R`. The app parses `?room=` on load, so
+  an invited friend clicks the link, types a nickname and presses **Join room**.
 - A room holds up to **5 humans** (host + 4 friends). When the host starts
   the match, bots fill remaining slots (at least one bot, up to 6
   combatants total — you always play *against the computer*, together).
