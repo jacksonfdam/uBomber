@@ -120,7 +120,9 @@ export interface Violation {
  */
 export function checkInvariants(state: GameState): Violation[] {
   const bad: Violation[] = [];
-  const note = (what: string): void => bad.push({ tick: state.tick, what });
+  const note = (what: string): void => {
+    bad.push({ tick: state.tick, what });
+  };
 
   for (const p of state.players) {
     if (!Number.isFinite(p.pos.x) || !Number.isFinite(p.pos.y)) {
