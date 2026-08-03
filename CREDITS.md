@@ -33,13 +33,17 @@ endorsed by any other game or rights holder.
 
 ## Typography
 
-- [Familjen Grotesk](https://fonts.google.com/specimen/Familjen+Grotesk) —
-  display (SIL OFL 1.1)
-- [Martian Mono](https://fonts.google.com/specimen/Martian+Mono) — numerals and
-  mono accents (SIL OFL 1.1)
+- [Press Start 2P](https://fonts.google.com/specimen/Press+Start+2P) — the
+  arcade display face used for every piece of interface chrome (SIL OFL 1.1)
+- [Inter](https://fonts.google.com/specimen/Inter) — longer prose, where a pixel
+  face stops being readable (SIL OFL 1.1)
 
-Both are loaded from Google Fonts; the UI falls back to the system sans-serif if
-they are unavailable.
+Both are loaded from Google Fonts; the UI falls back to a monospace and a system
+sans-serif if they are unavailable.
+
+The uBOMBER wordmark itself is not type: it is hand-authored 5×7 pixel art drawn
+on a canvas by `src/ui/logo.ts`, with a bomb standing in for the O and a fuse
+that actually burns.
 
 ## Setting
 
