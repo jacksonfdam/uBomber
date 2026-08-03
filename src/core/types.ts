@@ -91,17 +91,11 @@ export interface GameState {
   rngState: number;
 }
 
-/** Visual identity of a map; colors are hex strings consumed by the renderer. */
-export interface MapTheme {
-  floor: string;
-  wall: string;
-  crate: string;
-  flame: string;
-  accent: string;
-}
-
 /**
- * Map definition as stored in game/maps/*.json.
+ * Playable definition of a map. Purely structural: the visual and aural
+ * identity lives in the MapTheme exported next to it (see src/render/theme.ts),
+ * which keeps the simulation free of any rendering concern.
+ *
  * Grid legend: '#' wall, '.' floor, '*' crate, '?' 70% chance of a crate,
  * '1'..'6' spawn points (kept clear of crates on their orthogonal neighbors).
  */
@@ -110,7 +104,6 @@ export interface MapDef {
   name: string;
   district: string;
   description: string;
-  theme: MapTheme;
   grid: string[];
 }
 
