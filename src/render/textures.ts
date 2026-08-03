@@ -92,12 +92,7 @@ function grain(g: CanvasRenderingContext2D, rng: Rng, n: number, alpha: number):
  * Draws `fn` at (x, y) and again wrapped around every edge it crosses, so
  * features that overhang the patch reappear on the opposite side.
  */
-function tiled(
-  g: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  fn: (ox: number, oy: number) => void
-): void {
+function tiled(x: number, y: number, fn: (ox: number, oy: number) => void): void {
   for (const dx of [0, -TEX, TEX]) {
     for (const dy of [0, -TEX, TEX]) {
       if (dx !== 0 && x > TEX * 0.25 && x < TEX * 0.75) continue;
@@ -117,7 +112,7 @@ function stone(
   fill: string,
   radius: number
 ): void {
-  tiled(g, x, y, (px, py) => {
+  tiled(x, y, (px, py) => {
     g.fillStyle = fill;
     g.beginPath();
     g.roundRect(px, py, w, h, radius);
@@ -175,7 +170,7 @@ const metro: Gen = (g, t, rng) => {
     const x = rng.range(0, TEX);
     const y = rng.range(0, TEX);
     const r = rng.range(9, 26);
-    tiled(g, x, y, (px, py) => {
+    tiled(x, y, (px, py) => {
       g.fillStyle = mix(
         t.floor.base,
         rng.next() > 0.55 ? t.floor.alt : t.floor.grout,
@@ -267,7 +262,7 @@ const park: Gen = (g, t, rng) => {
   for (let i = 0; i < 26; i++) {
     const x = rng.range(0, TEX);
     const y = rng.range(0, TEX);
-    tiled(g, x, y, (px, py) => {
+    tiled(x, y, (px, py) => {
       g.fillStyle = mix(t.floor.base, t.floor.alt, rng.range(0.1, 0.7));
       g.beginPath();
       g.ellipse(px, py, rng.range(10, 28), rng.range(7, 18), rng.range(0, 3), 0, 7);
@@ -434,7 +429,7 @@ const granite: Gen = (g, t, rng) => {
     const y = rng.range(0, TEX);
     const w = rng.range(24, 62);
     const h = rng.range(18, 44);
-    tiled(g, x, y, (px, py) => {
+    tiled(x, y, (px, py) => {
       g.fillStyle = mix(
         t.floor.base,
         rng.next() > 0.5 ? t.floor.alt : t.floor.grout,
