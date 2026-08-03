@@ -34,8 +34,8 @@ export const theme: MapTheme = {
   tileset: 'plaza',
   face: 'concrete',
   floor: { base: '#d5cbbc', alt: '#3b3530', grout: '#2a2621' },
-  wall: { top: '#8d8378', front: '#5d4a42', edge: '#a89a8c' },
-  crate: { top: '#c39a78', front: '#a98467', interior: '#4a3325', crack: '#2c1e16' },
+  wall: { top: '#7c7268', front: '#4a3f39', edge: '#9b9186' },
+  crate: { top: '#d2a077', front: '#ab7c52', interior: '#4a3325', crack: '#2c1e16' },
   flame: { core: '#ffd0a0', edge: '#ff7043' },
   accent: '#8e4162',
   sky: {

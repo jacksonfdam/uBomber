@@ -34,8 +34,8 @@ export const theme: MapTheme = {
   tileset: 'quay',
   face: 'stone',
   floor: { base: '#aebdc4', alt: '#8b9ca6', grout: '#4f5d66' },
-  wall: { top: '#c3d3da', front: '#4a6670', edge: '#7d949e' },
-  crate: { top: '#bda183', front: '#a58d6f', interior: '#4a3c2b', crack: '#2d241a' },
+  wall: { top: '#a3b6bf', front: '#3d5760', edge: '#758d98' },
+  crate: { top: '#c9a678', front: '#a4855a', interior: '#4a3c2b', crack: '#2d241a' },
   flame: { core: '#fff0b0', edge: '#ffb300' },
   accent: '#2e7d9c',
   sky: {

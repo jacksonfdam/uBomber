@@ -42,7 +42,7 @@ export const CHAR_VARIANTS = PLAYER_COLORS.length;
 export interface AtlasTable {
   wall: number;
   suddenWall: number;
-  /** Crate at damage stage 0, 1, 2. */
+  /** Three interchangeable crate faces, picked per cell for variety. */
   crate: [number, number, number];
   shadow: number;
   ring: number;
@@ -88,19 +88,13 @@ function fillWithMaterial(
   g.restore();
 }
 
-/**
- * A 2.5D block: lifted top face, shaded front face, lit and shadowed edges.
- * `damage` (0..1) cracks the surface open to reveal the interior material.
- */
+/** A 2.5D block: lifted top face, shaded front face, lit and shadowed edges. */
 function drawBlock(
   g: CanvasRenderingContext2D,
   theme: MapTheme,
   face: HTMLCanvasElement,
-  interior: HTMLCanvasElement,
   top: string,
-  edge: string,
-  damage: number,
-  rng: Rng
+  edge: string
 ): void {
   const x = FOOT_X;
   const w = FOOT;
@@ -134,8 +128,11 @@ function drawBlock(
   g.rect(x, topY, w, FOOT - LIFT + 1);
   g.clip();
   fillWithMaterial(g, face, x, topY, w, FOOT);
-  g.fillStyle = mix(top, '#ffffff', 0.0);
-  g.globalAlpha = 0.55;
+  // Tint the top toward the theme's lit colour, but lightly: at higher opacity
+  // this washes the material pattern out and walls stop reading as their own
+  // substance.
+  g.fillStyle = top;
+  g.globalAlpha = 0.36;
   g.fillRect(x, topY, w, FOOT - LIFT + 1);
   g.globalAlpha = 1;
   // Sun rake across the top.
@@ -145,58 +142,6 @@ function drawBlock(
   g.fillStyle = sun;
   g.fillRect(x, topY, w, FOOT - LIFT + 1);
   g.restore();
-
-  // --- damage: cracks widening into holes that expose the interior
-  if (damage > 0) {
-    g.save();
-    g.beginPath();
-    g.rect(x, topY, w, CELL - topY);
-    g.clip();
-    const holes = Math.round(1 + damage * 3);
-    for (let i = 0; i < holes; i++) {
-      const hx = x + rng.range(w * 0.15, w * 0.85);
-      const hy = topY + rng.range(FOOT * 0.2, CELL - topY - 6);
-      const hr = rng.range(4, 6 + damage * 9);
-      g.save();
-      g.beginPath();
-      g.moveTo(hx + hr, hy);
-      for (let a = 1; a <= 7; a++) {
-        const ang = (a / 7) * Math.PI * 2;
-        const rr = hr * rng.range(0.6, 1.25);
-        g.lineTo(hx + Math.cos(ang) * rr, hy + Math.sin(ang) * rr * 0.8);
-      }
-      g.closePath();
-      g.clip();
-      fillWithMaterial(g, interior, hx - hr * 1.5, hy - hr * 1.5, hr * 3, hr * 3);
-      g.restore();
-      // Lip of the hole catches light on the top edge.
-      g.strokeStyle = 'rgba(0,0,0,0.45)';
-      g.lineWidth = 1.6;
-      g.beginPath();
-      g.arc(hx, hy, hr * 0.95, 0, Math.PI, true);
-      g.stroke();
-      g.strokeStyle = 'rgba(255,255,255,0.16)';
-      g.beginPath();
-      g.arc(hx, hy, hr * 0.95, 0, Math.PI);
-      g.stroke();
-    }
-    // Hairline cracks radiating out.
-    g.strokeStyle = mix(theme.crate.crack, '#000000', 0.3);
-    for (let i = 0; i < 3 + damage * 4; i++) {
-      g.lineWidth = rng.range(0.8, 1.9);
-      let cx2 = x + rng.range(6, w - 6);
-      let cy2 = topY + rng.range(8, CELL - topY - 8);
-      g.beginPath();
-      g.moveTo(cx2, cy2);
-      for (let s = 0; s < 4; s++) {
-        cx2 += rng.range(-9, 9);
-        cy2 += rng.range(2, 10);
-        g.lineTo(cx2, cy2);
-      }
-      g.stroke();
-    }
-    g.restore();
-  }
 
   // --- outline and the lit ridge along the top edge
   g.strokeStyle = 'rgba(0,0,0,0.5)';
@@ -308,26 +253,42 @@ function drawFlame(
   const cy = FOOT_Y + FOOT / 2;
   const half = FOOT / 2;
 
-  // Reach: how far the piece extends past the tile toward each neighbour.
-  const reach = { l: 0, r: 0, u: 0, d: 0 };
-  if (shape === 'center') {
-    reach.l = reach.r = reach.u = reach.d = half;
-  } else if (shape === 'h') {
-    reach.l = reach.r = half;
-    reach.u = reach.d = half * 0.62;
-  } else if (shape === 'v') {
-    reach.u = reach.d = half;
-    reach.l = reach.r = half * 0.62;
-  } else {
-    const soft = half * 0.55;
-    reach.l = shape === 'tipR' ? half : soft;
-    reach.r = shape === 'tipL' ? half : soft;
-    reach.u = shape === 'tipD' ? half : soft;
-    reach.d = shape === 'tipU' ? half : soft;
-    if (shape === 'tipL') reach.l = half * 0.9;
-    if (shape === 'tipR') reach.r = half * 0.9;
-    if (shape === 'tipU') reach.u = half * 0.9;
-    if (shape === 'tipD') reach.d = half * 0.9;
+  /**
+   * How far the piece reaches past the tile centre toward each neighbour.
+   * Beams stay narrow across their short axis so a blast reads as a cross of
+   * flame rather than a row of identical fireballs; a tip caps off on its open
+   * side and runs full width into the neighbour it connects to.
+   */
+  const thin = half * 0.34;
+  const cap = half * 0.72;
+  const reach = { l: half, r: half, u: half, d: half };
+  switch (shape) {
+    case 'center':
+      break;
+    case 'h':
+      reach.u = reach.d = thin;
+      break;
+    case 'v':
+      reach.l = reach.r = thin;
+      break;
+    // A "tipL" tile is the LEFT end of a horizontal beam: rounded on the left,
+    // continuing into its right-hand neighbour.
+    case 'tipL':
+      reach.l = cap;
+      reach.u = reach.d = thin;
+      break;
+    case 'tipR':
+      reach.r = cap;
+      reach.u = reach.d = thin;
+      break;
+    case 'tipU':
+      reach.u = cap;
+      reach.l = reach.r = thin;
+      break;
+    case 'tipD':
+      reach.d = cap;
+      reach.l = reach.r = thin;
+      break;
   }
 
   // Outer glow.
@@ -485,11 +446,13 @@ function drawPowerIcon(
 function drawDecor(g: CanvasRenderingContext2D, theme: MapTheme, rng: Rng): void {
   const cx = CELL / 2;
   const base = CELL - 8;
-  const hard = theme.tileset === 'concrete' || theme.tileset === 'metro' || theme.tileset === 'plaza';
+  // Paved arenas get street furniture; soft ground gets planting.
+  const paved: MapTheme['tileset'][] = ['concrete', 'metro', 'plaza', 'cobble', 'setts'];
+  const hard = paved.includes(theme.tileset);
 
-  g.fillStyle = 'rgba(0,0,0,0.2)';
+  g.fillStyle = 'rgba(0,0,0,0.24)';
   g.beginPath();
-  g.ellipse(cx, base, 13, 4.5, 0, 0, 7);
+  g.ellipse(cx, base, 17, 5.5, 0, 0, 7);
   g.fill();
 
   if (hard) {
@@ -508,16 +471,18 @@ function drawDecor(g: CanvasRenderingContext2D, theme: MapTheme, rng: Rng): void
     return;
   }
 
-  // Vegetation: a few overlapping leafy lobes.
-  for (let i = 0; i < 7; i++) {
+  // Vegetation: a low clump of overlapping leafy lobes. Kept wide and flat on
+  // purpose — anything tall with a stalk reads as a lit bomb at a glance, which
+  // is the one thing floor decor must never do.
+  for (let i = 0; i < 11; i++) {
     const a = rng.range(-Math.PI, 0);
-    const d = rng.range(0, 11);
-    g.fillStyle = mix(theme.accent, i % 2 === 0 ? '#ffffff' : '#000000', rng.range(0.02, 0.24));
+    const d = rng.range(0, 16);
+    g.fillStyle = mix(theme.accent, i % 2 === 0 ? '#ffffff' : '#000000', rng.range(0.14, 0.42));
     g.beginPath();
     g.ellipse(
       cx + Math.cos(a) * d,
-      base - 8 + Math.sin(a) * 6,
-      rng.range(6, 11),
+      base - 7 + Math.sin(a) * 5,
+      rng.range(8, 14),
       rng.range(5, 9),
       rng.range(0, 3),
       0,
@@ -525,13 +490,12 @@ function drawDecor(g: CanvasRenderingContext2D, theme: MapTheme, rng: Rng): void
     );
     g.fill();
   }
-  g.strokeStyle = 'rgba(0,0,0,0.28)';
-  g.lineWidth = 1.6;
+  // Highlights on the upper leaves so the clump has a top.
+  g.fillStyle = mix(theme.accent, '#ffffff', 0.6);
   for (let i = 0; i < 4; i++) {
     g.beginPath();
-    g.moveTo(cx + rng.range(-7, 7), base);
-    g.lineTo(cx + rng.range(-9, 9), base - rng.range(9, 17));
-    g.stroke();
+    g.ellipse(cx + rng.range(-12, 12), base - rng.range(8, 15), rng.range(3, 5), 2.2, 0, 0, 7);
+    g.fill();
   }
 }
 
@@ -613,36 +577,29 @@ export function buildAtlas(theme: MapTheme, materials: ArenaMaterials, seed: num
   const at = (index: number): void => {
     g.setTransform(1, 0, 0, 1, (index % GRID) * CELL, Math.floor(index / GRID) * CELL);
   };
-  const rng = new Rng(seed ^ 0x27d4eb2f);
 
   // --- blocks
   const wall = cell++;
   at(wall);
-  drawBlock(g, theme, materials.wall, materials.interior, theme.wall.top, theme.wall.edge, 0, rng);
+  drawBlock(g, theme, materials.wall, theme.wall.top, theme.wall.edge);
 
   const suddenWall = cell++;
   at(suddenWall);
-  drawBlock(g, theme, materials.wall, materials.interior, theme.wall.top, theme.wall.edge, 0, rng);
-  // Sudden-death blocks read hot so the closing ring is unmistakable.
+  drawBlock(g, theme, materials.wall, theme.wall.top, theme.wall.edge);
+  // Sudden-death blocks read hot, so the ring closing in is unmistakable.
   g.globalCompositeOperation = 'source-atop';
-  g.fillStyle = `${theme.flame.edge}44`;
+  g.fillStyle = `${theme.flame.edge}80`;
   g.fillRect(0, 0, CELL, CELL);
   g.globalCompositeOperation = 'source-over';
+  g.strokeStyle = theme.flame.core;
+  g.lineWidth = 2.5;
+  g.strokeRect(FOOT_X + 1.5, FOOT_Y - LIFT + 1.5, FOOT - 3, CELL - (FOOT_Y - LIFT) - 3);
 
   const crate: [number, number, number] = [0, 0, 0];
-  for (let stage = 0; stage < 3; stage++) {
-    crate[stage] = cell++;
-    at(crate[stage]);
-    drawBlock(
-      g,
-      theme,
-      materials.crate,
-      materials.interior,
-      theme.crate.top,
-      theme.crate.crack,
-      stage * 0.5,
-      new Rng((seed ^ 0x165667b1) + stage * 7919)
-    );
+  for (let variant = 0; variant < materials.crates.length && variant < 3; variant++) {
+    crate[variant] = cell++;
+    at(crate[variant]);
+    drawBlock(g, theme, materials.crates[variant], theme.crate.top, theme.crate.crack);
   }
 
   // --- markers

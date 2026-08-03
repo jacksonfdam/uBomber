@@ -443,23 +443,40 @@ function planeFrom(canvas: HTMLCanvasElement, w: number, h: number, z: number): 
 export class Backdrop {
   readonly group = new THREE.Group();
   private layers: THREE.Mesh[] = [];
+  private baseW: number;
+  private baseH: number;
 
   constructor(theme: MapTheme, viewW: number, viewH: number, seed: number) {
-    const w = viewW * 1.25;
-    const h = viewH * 1.25;
+    this.baseW = viewW;
+    this.baseH = viewH;
 
-    const sky = planeFrom(skyCanvas(theme, new Rng(seed ^ 0x1b873593)), w, h, -40);
+    const sky = planeFrom(skyCanvas(theme, new Rng(seed ^ 0x1b873593)), viewW, viewH, -40);
     this.group.add(sky);
     this.layers.push(sky);
 
     theme.skyline.forEach((layer, i) => {
       const canvas = silhouetteCanvas(theme, layer, new Rng(seed ^ (0x2545f491 + i * 7919)));
-      const plane = planeFrom(canvas, w, h, -30 + i * 8);
+      const plane = planeFrom(canvas, viewW, viewH, -30 + i * 8);
       // Bands sit low: the arena covers the middle of the screen.
       plane.position.y = -viewH * 0.06 * (1 - i * 0.5);
       this.group.add(plane);
       this.layers.push(plane);
     });
+  }
+
+  /**
+   * Stretches every layer to cover the camera's current extents.
+   *
+   * The camera grows past the stage on wide viewports, so a fixed-size backdrop
+   * leaves the clear colour showing down the outer edges — and the post stack's
+   * aberration then draws a coloured seam along that hard boundary.
+   */
+  cover(halfW: number, halfH: number): void {
+    const scaleX = (halfW * 2 * 1.2) / this.baseW;
+    const scaleY = (halfH * 2 * 1.2) / this.baseH;
+    for (const layer of this.layers) {
+      layer.scale.set(Math.max(1, scaleX), Math.max(1, scaleY), 1);
+    }
   }
 
   /** Parallax against the camera shake: far layers move least. */

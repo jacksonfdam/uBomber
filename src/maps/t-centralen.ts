@@ -34,8 +34,8 @@ export const theme: MapTheme = {
   tileset: 'metro',
   face: 'tiled',
   floor: { base: '#39558c', alt: '#6c93d6', grout: '#1f3054' },
-  wall: { top: '#a9c8ff', front: '#37474f', edge: '#5d7fa8' },
-  crate: { top: '#9fb3bd', front: '#78909c', interior: '#2b3a42', crack: '#16232b' },
+  wall: { top: '#6f93bf', front: '#2c3d47', edge: '#48657e' },
+  crate: { top: '#cfa26a', front: '#a87b4c', interior: '#3a2a1a', crack: '#241a10' },
   flame: { core: '#fff0a8', edge: '#ffb300' },
   accent: '#0277bd',
   sky: {

@@ -34,8 +34,8 @@ export const theme: MapTheme = {
   tileset: 'timber',
   face: 'timber',
   floor: { base: '#a8753f', alt: '#c99a5c', grout: '#5d3d1f' },
-  wall: { top: '#9d3f2c', front: '#5f4b32', edge: '#c05238' },
-  crate: { top: '#c19255', front: '#9c7643', interior: '#4a3418', crack: '#2f2110' },
+  wall: { top: '#8f3626', front: '#4e2b1c', edge: '#b04a32' },
+  crate: { top: '#cf9f5d', front: '#a87c47', interior: '#4a3418', crack: '#2f2110' },
   flame: { core: '#ffdb8a', edge: '#ef6c00' },
   accent: '#6d8b3d',
   sky: {

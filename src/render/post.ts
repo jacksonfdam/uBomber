@@ -15,6 +15,13 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { MapTheme } from './theme';
 
+/**
+ * Chromatic aberration strength in UV units. Kept low deliberately: the split
+ * grows with the square of the distance from centre, so anything higher smears
+ * visible colour bars down the outer edge of a wide viewport.
+ */
+const ABERRATION = 0.00045;
+
 const GRADE_SHADER = {
   uniforms: {
     tDiffuse: { value: null as THREE.Texture | null },
@@ -23,7 +30,7 @@ const GRADE_SHADER = {
     uSaturation: { value: 1 },
     uVignette: { value: 0.3 },
     uGrain: { value: 0.022 },
-    uAberration: { value: 0.001 },
+    uAberration: { value: ABERRATION },
     uFlash: { value: 0 },
     uTime: { value: 0 },
     uEnabled: { value: 1 },
@@ -61,12 +68,13 @@ const GRADE_SHADER = {
       vec2 fromCenter = vUv - 0.5;
       float r2 = dot(fromCenter, fromCenter);
 
-      // Chromatic aberration, growing toward the edges.
-      vec2 ab = fromCenter * uAberration * (1.0 + r2 * 4.0) * 2.0;
+      // Chromatic aberration, growing toward the edges. Samples are clamped so
+      // the outermost pixels cannot pull colour in from outside the frame.
+      vec2 ab = fromCenter * uAberration * (1.0 + r2 * 2.0) * 2.0;
       vec3 col;
-      col.r = texture2D(tDiffuse, vUv + ab).r;
+      col.r = texture2D(tDiffuse, clamp(vUv + ab, 0.0, 1.0)).r;
       col.g = texture2D(tDiffuse, vUv).g;
-      col.b = texture2D(tDiffuse, vUv - ab).b;
+      col.b = texture2D(tDiffuse, clamp(vUv - ab, 0.0, 1.0)).b;
 
       col = col * uGain + uLift;
 
@@ -145,7 +153,7 @@ export class PostStack {
     const u = this.gradePass.uniforms;
     u.uEnabled.value = settings.enabled ? 1 : 0;
     u.uGrain.value = settings.enabled && settings.grain ? 0.022 : 0;
-    u.uAberration.value = settings.enabled && settings.aberration ? 0.001 : 0;
+    u.uAberration.value = settings.enabled && settings.aberration ? ABERRATION : 0;
   }
 
   /** 0..1 white-out driven by the match, decayed by the caller. */

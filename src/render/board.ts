@@ -76,7 +76,7 @@ const FLOOR_FRAG = /* glsl */ `
   uniform sampler2D uFloor;
   uniform vec2 uCells;
   uniform vec2 uRepeat;
-  uniform vec3 uLight;
+  uniform vec2 uLight;
   uniform float uCheck;
 
   void main() {
@@ -425,9 +425,9 @@ export class BoardRenderer {
           const cell = sudden.has(`${c},${r}`) ? t.suddenWall : t.wall;
           this.pushTile(cell, c + 0.5, r + 1, null, 1);
         } else {
-          // Crates vary between three weathering stages, stable per cell.
-          const stage = [0, 0, 1, 1, 2][cellHash(c, r, this.mapSalt ^ 0x51ed) % 5];
-          this.pushTile(t.crate[stage], c + 0.5, r + 1, null, 1);
+          // Crates pick one of three faces, stable per cell for this map.
+          const variant = cellHash(c, r, this.mapSalt ^ 0x51ed) % t.crate.length;
+          this.pushTile(t.crate[variant], c + 0.5, r + 1, null, 1);
         }
       }
 
@@ -503,6 +503,7 @@ export class BoardRenderer {
     this.camera.top = halfH;
     this.camera.bottom = -halfH;
     this.camera.updateProjectionMatrix();
+    this.backdrop.cover(halfW, halfH);
     this.post.setSize(w, h);
   }
 

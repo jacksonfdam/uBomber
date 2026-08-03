@@ -647,42 +647,22 @@ function crateFace(t: MapTheme, rng: Rng): HTMLCanvasElement {
   return c;
 }
 
-/** Exposed interior once a crate cracks — deliberately unlike the surface. */
-function interiorFace(t: MapTheme, rng: Rng): HTMLCanvasElement {
-  const [c, g] = canvas2d();
-  const grad = g.createLinearGradient(0, 0, 0, TEX);
-  grad.addColorStop(0, t.crate.interior);
-  grad.addColorStop(1, mix(t.crate.interior, '#000000', 0.45));
-  g.fillStyle = grad;
-  g.fillRect(0, 0, TEX, TEX);
-  for (let i = 0; i < 40; i++) {
-    g.fillStyle = mix(t.crate.interior, '#000000', rng.range(0, 0.55));
-    g.beginPath();
-    g.ellipse(
-      rng.range(0, TEX),
-      rng.range(0, TEX),
-      rng.range(1.5, 5),
-      rng.range(1, 3.5),
-      rng.range(0, 3),
-      0,
-      7
-    );
-    g.fill();
-  }
-  noiseOverlay(g, rng, '#000000', t.crate.interior, 18, 0.16);
-  grain(g, rng, 320, 0.11);
-  return c;
-}
+/** How many crate faces the arena mixes for visual variety. */
+export const CRATE_VARIANTS = 3;
 
 export interface ArenaMaterials {
   /** Tiling floor patch; repeats across the whole board. */
   floor: HTMLCanvasElement;
   /** Vertical face of indestructible blocks. */
   wall: HTMLCanvasElement;
-  /** Vertical face of destructible crates. */
-  crate: HTMLCanvasElement;
-  /** Material revealed behind a cracked crate. */
-  interior: HTMLCanvasElement;
+  /**
+   * Vertical faces of destructible crates: the same construction painted from
+   * different seeds, so neighbouring crates vary in plank tone and grain
+   * without any of them looking pre-damaged. The crate's `interior` colour is
+   * carried by the debris particles at the moment it breaks, which is the only
+   * time the player can actually see inside one.
+   */
+  crates: HTMLCanvasElement[];
 }
 
 /** Paints every material the arena needs. Called once per match. */
@@ -693,10 +673,9 @@ export function generateMaterials(theme: MapTheme, seed: number): ArenaMaterials
   const [wall, wg] = canvas2d();
   FACES[theme.face](wg, theme, new Rng(seed ^ 0x9e3779b9));
 
-  return {
-    floor,
-    wall,
-    crate: crateFace(theme, new Rng(seed ^ 0x85ebca6b)),
-    interior: interiorFace(theme, new Rng(seed ^ 0xc2b2ae35)),
-  };
+  const crates = Array.from({ length: CRATE_VARIANTS }, (_, i) =>
+    crateFace(theme, new Rng((seed ^ 0x85ebca6b) + i * 0x9e3779b1))
+  );
+
+  return { floor, wall, crates };
 }

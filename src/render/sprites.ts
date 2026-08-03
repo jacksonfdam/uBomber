@@ -97,12 +97,16 @@ export const ANIMS: Record<string, Pose[]> = {
     P({ facing: 'down', arms: 1, eyes: 1, hat: 0.13, squash: 0.96, bob: 1 }),
   ],
 
-  /** Caught in the blast: flattened, flung, going still. */
+  /**
+   * Caught in the blast: a big anticipation stretch, a hard compress, then the
+   * flattened coat. The flat frames stay wide on purpose — squashed much
+   * thinner and the death stops reading at all at tile scale.
+   */
   die: [
-    P({ facing: 'down', squash: 1.14, eyes: 1, arms: -1, bob: -4, hat: -0.3 }),
-    P({ facing: 'down', squash: 0.8, eyes: 2, arms: 1, bob: -1, hat: 0.35 }),
-    P({ facing: 'down', squash: 0.5, eyes: 2, arms: 0.6, flat: true }),
-    P({ facing: 'down', squash: 0.34, eyes: 2, arms: 0.3, flat: true }),
+    P({ facing: 'down', squash: 1.18, eyes: 1, arms: -1, bob: -6, hat: -0.36 }),
+    P({ facing: 'down', squash: 0.7, eyes: 2, arms: 1, bob: 0, hat: 0.42 }),
+    P({ facing: 'down', squash: 0.62, eyes: 2, arms: 0.6, flat: true }),
+    P({ facing: 'down', squash: 0.52, eyes: 2, arms: 0.3, flat: true }),
   ],
 
   /** Last one standing. */
@@ -193,15 +197,32 @@ export function drawBomber(
   g.fill();
 
   if (pose.flat) {
-    // Flattened silhouette: a puddle of coat with the beanie beside it.
+    // Flattened silhouette: a wide puddle of coat, the team-coloured beanie
+    // knocked off to one side, and two boots sticking out.
+    g.fillStyle = BOOT;
+    for (const s of [-1, 1]) {
+      g.beginPath();
+      g.ellipse(s * bodyW * 0.5, -4, 6, 3.5 * sq, s * 0.4, 0, 7);
+      g.fill();
+      g.stroke();
+    }
     g.fillStyle = COAT_DARK;
     g.beginPath();
-    g.ellipse(0, -5 * sq, bodyW * 0.72, 9 * sq, 0, 0, 7);
+    g.ellipse(0, -6 * sq, bodyW * 0.88, 11 * sq, 0, 0, 7);
     g.fill();
     g.stroke();
+    g.fillStyle = COAT;
+    g.beginPath();
+    g.ellipse(-bodyW * 0.1, -8 * sq, bodyW * 0.5, 6 * sq, 0, 0, 7);
+    g.fill();
     g.fillStyle = team;
     g.beginPath();
-    g.ellipse(bodyW * 0.42, -7 * sq, 9, 6 * sq, -0.3, 0, 7);
+    g.ellipse(bodyW * 0.6, -8 * sq, 11, 7 * sq, -0.35, 0, 7);
+    g.fill();
+    g.stroke();
+    g.fillStyle = lighten(team, 0.45);
+    g.beginPath();
+    g.arc(bodyW * 0.88, -10 * sq, 3.6, 0, 7);
     g.fill();
     g.stroke();
     g.restore();
