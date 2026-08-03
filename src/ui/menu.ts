@@ -171,38 +171,53 @@ export class ArcadeMenu {
     this.hooks.onMove?.();
   }
 
+  /**
+   * Swallows a key the menu acted on, so nothing downstream sees it.
+   *
+   * This listener runs in the capture phase, and activating a row can create a
+   * Match — which registers its own window keydown handler. A listener added
+   * mid-dispatch is still invoked when the event reaches the bubble phase on the
+   * same target, so without stopping propagation the Space that starts a match
+   * also drops a bomb inside it: every keyboard-started match began with a live
+   * bomb at the player's spawn and cost them a life.
+   */
+  private consume(event: KeyboardEvent): void {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
   private onKeyDown = (event: KeyboardEvent): void => {
     if (!this.mounted || event.metaKey || event.ctrlKey || event.altKey) return;
     const inField = this.rows.some((r) => r.input && r.input === document.activeElement);
 
     switch (event.code) {
       case 'ArrowUp':
-        event.preventDefault();
+        this.consume(event);
         this.move(-1);
         return;
       case 'ArrowDown':
-        event.preventDefault();
+        this.consume(event);
         this.move(1);
         return;
       case 'Enter':
       case 'NumpadEnter':
-        event.preventDefault();
+        this.consume(event);
         this.activate();
         return;
       case 'Space':
         // A nickname may contain spaces, so only act outside a field.
         if (inField) return;
-        event.preventDefault();
+        this.consume(event);
         this.activate();
         return;
       case 'ArrowLeft':
         if (inField) return;
-        event.preventDefault();
+        this.consume(event);
         this.adjust(-1);
         return;
       case 'ArrowRight':
         if (inField) return;
-        event.preventDefault();
+        this.consume(event);
         this.adjust(1);
         return;
       default:
