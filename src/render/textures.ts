@@ -611,13 +611,22 @@ const FACES: Record<FaceKind, (g: CanvasRenderingContext2D, t: MapTheme, rng: Rn
 
 // ----------------------------------------------------------------- crates
 
-/** The destructible crate face: boarded timber, tinted by the map. */
-function crateFace(t: MapTheme, rng: Rng): HTMLCanvasElement {
+/**
+ * The destructible crate face: boarded timber, tinted by the map.
+ *
+ * Crates stay warm timber on every map even where the walls are stone, brick or
+ * tile. That is the readability rule the whole board depends on: the player has
+ * to know at a glance which blocks a bomb can open.
+ *
+ * `boards` changes the plank count so the variants differ in construction and
+ * not only in tone — same-tone variants are invisible at tile scale.
+ */
+function crateFace(t: MapTheme, rng: Rng, boards: number): HTMLCanvasElement {
   const [c, g] = canvas2d();
   g.fillStyle = t.crate.front;
   g.fillRect(0, 0, TEX, TEX);
   // Boards.
-  const rows = 4;
+  const rows = boards;
   const h = TEX / rows;
   for (let r = 0; r < rows; r++) {
     g.fillStyle = mix(t.crate.front, t.crate.top, rng.range(0, 0.4));
@@ -674,7 +683,7 @@ export function generateMaterials(theme: MapTheme, seed: number): ArenaMaterials
   FACES[theme.face](wg, theme, new Rng(seed ^ 0x9e3779b9));
 
   const crates = Array.from({ length: CRATE_VARIANTS }, (_, i) =>
-    crateFace(theme, new Rng((seed ^ 0x85ebca6b) + i * 0x9e3779b1))
+    crateFace(theme, new Rng((seed ^ 0x85ebca6b) + i * 0x9e3779b1), 3 + i)
   );
 
   return { floor, wall, crates };
