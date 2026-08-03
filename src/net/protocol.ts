@@ -60,7 +60,7 @@ export function isValidRoomCode(code: string): boolean {
 
 /** Invite URL a host shares with friends. */
 export function inviteUrl(origin: string, code: string): string {
-  return `${origin}/game/?room=${code}`;
+  return `${origin}/?room=${code}`;
 }
 
 /** Extracts a room code from a URL, or null. */
