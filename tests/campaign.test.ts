@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CAMPAIGN_VERSION,
+  EMPTY_PROGRESS,
+  campaignSeed,
+  isCampaignComplete,
+  migrateProgress,
+  nextStage,
+  stageMapId,
+  stageRound,
+} from '../src/core/campaign';
+import {
   BASE_SPEED,
+  CAMPAIGN_STAGES,
   EXIT_ENRAGE_MAX,
   EXIT_ENRAGE_MONSTERS,
   FLAME_TTL,
+  ROUNDS_PER_THEME,
   SCORE_STAGE_CLEAR,
   SUDDEN_DEATH_START,
   TICK_DT,
@@ -233,6 +245,51 @@ describe('losing a campaign stage', () => {
     step(arena, [], TICK_DT);
     expect(arena.players[0].speed).toBe(5);
     expect(arena.players[0].wallPass).toBe(true);
+  });
+});
+
+describe('saved progress', () => {
+  it('starts empty when there is nothing saved', () => {
+    expect(migrateProgress(null)).toEqual(EMPTY_PROGRESS);
+    expect(migrateProgress('nonsense')).toEqual(EMPTY_PROGRESS);
+    expect(migrateProgress({})).toEqual(EMPTY_PROGRESS);
+  });
+
+  it('credits a whole run of rounds per beaten map from version 1', () => {
+    const migrated = migrateProgress({
+      completed: ['gamla-stan', 't-centralen'],
+      totalScore: 1234,
+    });
+    expect(migrated.version).toBe(CAMPAIGN_VERSION);
+    expect(migrated.cleared).toBe(2 * ROUNDS_PER_THEME);
+    expect(migrated.totalScore).toBe(1234);
+    expect(nextStage(migrated)).toBe(11);
+  });
+
+  it('keeps version 2 records and clamps them to the ladder', () => {
+    expect(migrateProgress({ version: 2, cleared: 12, totalScore: 5 })).toEqual({
+      version: CAMPAIGN_VERSION,
+      cleared: 12,
+      totalScore: 5,
+    });
+    expect(migrateProgress({ cleared: 999 }).cleared).toBe(CAMPAIGN_STAGES);
+    expect(migrateProgress({ cleared: -4 }).cleared).toBe(0);
+  });
+
+  it('reports completion only at the end of the ladder', () => {
+    expect(isCampaignComplete({ ...EMPTY_PROGRESS, cleared: 49 })).toBe(false);
+    const done = { ...EMPTY_PROGRESS, cleared: CAMPAIGN_STAGES };
+    expect(isCampaignComplete(done)).toBe(true);
+    expect(nextStage(done)).toBe(CAMPAIGN_STAGES);
+  });
+
+  it('derives a stable seed and map from the stage number', () => {
+    const ids = ['a', 'b', 'c'];
+    expect(campaignSeed(12)).toBe(campaignSeed(12));
+    expect(campaignSeed(12)).not.toBe(campaignSeed(13));
+    expect(stageMapId(ids, 1)).toBe('a');
+    expect(stageMapId(ids, 4)).toBe('a');
+    expect(stageRound(ids.length + 1, ids.length)).toBe(2);
   });
 });
 
