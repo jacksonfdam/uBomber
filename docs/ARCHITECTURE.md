@@ -129,5 +129,5 @@ perturb the deterministic state that guests reconcile to.
 - Online multiplayer needs a `/config.json` with Supabase credentials served
   next to the build. Without it the online buttons say so and solo play keeps
   working.
-- There is no cross-origin isolation requirement any more — that was a Godot web
-  export constraint. This is an ordinary Vite build.
+- An ordinary Vite build: static files, no cross-origin isolation headers, no
+  WebAssembly runtime and no export step. Any static host will serve it.
