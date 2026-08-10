@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   BASE_SPEED,
   BOMB_FUSE,
+  CURSE_DURATION,
+  CURSE_MIN_RANGE,
+  CURSE_SHORT_FUSE,
+  CURSE_SLOW_SPEED,
   FLAME_TTL,
   MATCH_TIME_SECONDS,
   RESPAWN_DELAY,
@@ -16,7 +20,14 @@ import {
   SUDDEN_DEATH_START,
   TICK_DT,
 } from '../src/core/constants';
-import { createGame, flameAt, step } from '../src/core/game';
+import {
+  createGame,
+  effectiveFuse,
+  effectiveRange,
+  effectiveSpeed,
+  flameAt,
+  step,
+} from '../src/core/game';
 import { rand } from '../src/core/rng';
 import { IDLE_INPUT, type MapDef, type PlayerInput } from '../src/core/types';
 
@@ -77,6 +88,24 @@ describe('createGame', () => {
     expect(state.players[1].pos).toEqual({ x: 13.5, y: 1.5 });
     expect(state.players.every((p) => p.alive)).toBe(true);
     expect(state.status).toBe('running');
+  });
+
+  it('defaults to deathmatch with no campaign state and no monsters', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    expect(state.mode).toBe('deathmatch');
+    expect(state.campaign).toBeNull();
+    expect(state.monsters).toEqual([]);
+  });
+
+  it('starts players without any of the classic power-up effects', () => {
+    const [p] = createGame(TEST_MAP, TWO_PLAYERS, 1).players;
+    expect(p.detonator).toBe(false);
+    expect(p.wallPass).toBe(false);
+    expect(p.bombPass).toBe(false);
+    expect(p.flamePass).toBe(false);
+    expect(p.invincibleFor).toBe(0);
+    expect(p.curse).toBeNull();
+    expect(p.curseFor).toBe(0);
   });
 
   it('rejects rosters below 2 players', () => {
@@ -187,6 +216,57 @@ describe('power-ups', () => {
     state.powerups.push({ x: 2, y: 1, type: 'bomb' });
     run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
     expect(state.players[0].bombCap).toBe(2);
+  });
+});
+
+describe('curses', () => {
+  it('reports base stats while uncursed', () => {
+    const [p] = createGame(TEST_MAP, TWO_PLAYERS, 1).players;
+    expect(effectiveSpeed(p)).toBe(BASE_SPEED);
+    expect(effectiveRange(p)).toBe(p.flameRange);
+    expect(effectiveFuse(p)).toBe(BOMB_FUSE);
+  });
+
+  it('overrides speed, range and fuse while cursed', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    const p = state.players[0];
+
+    p.curse = 'slow';
+    expect(effectiveSpeed(p)).toBe(CURSE_SLOW_SPEED);
+    p.curse = 'min-range';
+    expect(effectiveRange(p)).toBe(CURSE_MIN_RANGE);
+    p.curse = 'short-fuse';
+    expect(effectiveFuse(p)).toBe(CURSE_SHORT_FUSE);
+  });
+
+  it('slows the player down for real', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].curse = 'slow';
+    state.players[0].curseFor = CURSE_DURATION;
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(state.players[0].pos.x).toBeCloseTo(1.5 + CURSE_SLOW_SPEED, 1);
+  });
+
+  it('wears off after CURSE_DURATION', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].curse = 'slow';
+    state.players[0].curseFor = CURSE_DURATION;
+
+    run(state, [], CURSE_DURATION - 1);
+    expect(state.players[0].curse).toBe('slow');
+
+    run(state, [], 1.5);
+    expect(state.players[0].curse).toBeNull();
+    expect(state.players[0].curseFor).toBe(0);
+  });
+
+  it('drops bombs on its own under the bomb-drop curse', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].curse = 'bomb-drop';
+    state.players[0].curseFor = CURSE_DURATION;
+
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: false }), TICK_DT);
+    expect(state.bombs).toHaveLength(1);
   });
 });
 

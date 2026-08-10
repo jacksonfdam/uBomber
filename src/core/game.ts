@@ -3,6 +3,9 @@ import {
   BASE_FLAME_RANGE,
   BASE_SPEED,
   BOMB_FUSE,
+  CURSE_MIN_RANGE,
+  CURSE_SHORT_FUSE,
+  CURSE_SLOW_SPEED,
   FLAME_TTL,
   MATCH_TIME_SECONDS,
   MAX_BOMB_CAP,
@@ -172,12 +175,14 @@ export function step(
   if (state.status !== 'running') return;
   state.tick++;
   state.time += dt;
+  updateStatusEffects(state, dt);
 
   for (const p of state.players) {
     if (!p.alive) continue;
     const input = inputs[p.id] ?? { dx: 0, dy: 0, bomb: false };
     movePlayer(state, p, input, dt);
-    if (input.bomb) tryPlaceBomb(state, p);
+    // The bomb-drop curse presses the button for you.
+    if (input.bomb || p.curse === 'bomb-drop') tryPlaceBomb(state, p);
     pickUpPowerUp(state, p);
   }
 
@@ -189,10 +194,51 @@ export function step(
   resolveOutcome(state, dt);
 }
 
+/** Speed after curses. Kept in one place so bots and the renderer agree. */
+export function effectiveSpeed(p: PlayerState): number {
+  return p.curse === 'slow' ? CURSE_SLOW_SPEED : p.speed;
+}
+
+/** Blast radius of the next bomb this player drops. */
+export function effectiveRange(p: PlayerState): number {
+  return p.curse === 'min-range' ? CURSE_MIN_RANGE : p.flameRange;
+}
+
+/** Fuse of the next bomb this player drops. */
+export function effectiveFuse(p: PlayerState): number {
+  return p.curse === 'short-fuse' ? CURSE_SHORT_FUSE : BOMB_FUSE;
+}
+
+/** Decays the timed buffs and curses. Respawn grace lives in updateRespawns. */
+function updateStatusEffects(state: GameState, dt: number): void {
+  for (const p of state.players) {
+    p.invincibleFor = Math.max(0, p.invincibleFor - dt);
+    if (p.curseFor <= 0) continue;
+    p.curseFor = Math.max(0, p.curseFor - dt);
+    if (p.curseFor === 0) p.curse = null;
+  }
+}
+
+/** Classic campaign rule: dying costs you every power-up you had collected. */
+function resetLoadout(p: PlayerState): void {
+  p.speed = BASE_SPEED;
+  p.bombCap = BASE_BOMB_CAP;
+  p.flameRange = BASE_FLAME_RANGE;
+  p.detonator = false;
+  p.wallPass = false;
+  p.bombPass = false;
+  p.flamePass = false;
+  p.invincibleFor = 0;
+  p.curse = null;
+  p.curseFor = 0;
+}
+
 /** Takes one life; players with lives left queue a respawn at their spawn. */
-function loseLife(_state: GameState, p: PlayerState): void {
+function loseLife(state: GameState, p: PlayerState): void {
   p.alive = false;
   p.lives = Math.max(0, p.lives - 1);
+  // The arena keeps your kit across respawns; the campaign takes it away.
+  if (state.mode === 'campaign') resetLoadout(p);
   if (p.lives > 0) p.respawnIn = RESPAWN_DELAY;
 }
 
@@ -304,7 +350,7 @@ function movePlayer(
   if (dx !== 0 && dy !== 0) dy = 0;
   if (dx === 0 && dy === 0) return;
 
-  const dist = p.speed * dt;
+  const dist = effectiveSpeed(p) * dt;
   const here = tileOf(p.pos);
 
   if (dx !== 0) {
@@ -346,8 +392,8 @@ function tryPlaceBomb(state: GameState, p: PlayerState): void {
     owner: p.id,
     x: here.x,
     y: here.y,
-    fuse: BOMB_FUSE,
-    range: p.flameRange,
+    fuse: effectiveFuse(p),
+    range: effectiveRange(p),
   });
   p.activeBombs++;
 }
