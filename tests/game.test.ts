@@ -28,6 +28,7 @@ import {
   effectiveRange,
   effectiveSpeed,
   flameAt,
+  rollPowerUp,
   step,
 } from '../src/core/game';
 import { rand } from '../src/core/rng';
@@ -260,6 +261,34 @@ describe('power-ups', () => {
     run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
     expect(state.players[0].curse).not.toBeNull();
     expect(state.players[0].curseFor).toBeGreaterThan(CURSE_DURATION - 1);
+  });
+});
+
+describe('drop tables', () => {
+  /** The 40/40/20 split as it was written before the weighted tables landed. */
+  function legacyRoll(carrier: { rngState: number }): string {
+    const roll = rand(carrier);
+    if (roll < 0.4) return 'bomb';
+    if (roll < 0.8) return 'flame';
+    return 'speed';
+  }
+
+  it('draws the same arena sequence as before the weighted tables', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 4242);
+    const legacy = { rngState: state.rngState };
+
+    for (let i = 0; i < 200; i++) {
+      expect(rollPowerUp(state)).toBe(legacyRoll(legacy));
+      // One draw each, so the two carriers stay in lockstep.
+      expect(state.rngState).toBe(legacy.rngState);
+    }
+  });
+
+  it('never drops a campaign-only power-up in the arena', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 7);
+    for (let i = 0; i < 500; i++) {
+      expect(['bomb', 'flame', 'speed']).toContain(rollPowerUp(state));
+    }
   });
 });
 

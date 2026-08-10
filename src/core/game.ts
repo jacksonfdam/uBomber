@@ -3,6 +3,7 @@ import {
   BASE_FLAME_RANGE,
   BASE_SPEED,
   BOMB_FUSE,
+  CAMPAIGN_DROP_CHANCE,
   CURSE_DURATION,
   CURSE_MIN_RANGE,
   CURSE_SHORT_FUSE,
@@ -543,17 +544,52 @@ function updateBombs(state: GameState, dt: number): void {
     state.grid[c.y][c.x] = 'floor';
     const owner = state.players[c.owner];
     if (owner) owner.score += SCORE_CRATE;
-    if (rand(state) < POWERUP_DROP_CHANCE) {
+    const chance =
+      state.mode === 'campaign' ? CAMPAIGN_DROP_CHANCE : POWERUP_DROP_CHANCE;
+    if (rand(state) < chance) {
       state.powerups.push({ x: c.x, y: c.y, type: rollPowerUp(state) });
     }
   }
 }
 
-function rollPowerUp(state: GameState): PowerUpType {
-  const roll = rand(state);
-  if (roll < 0.4) return 'bomb';
-  if (roll < 0.8) return 'flame';
-  return 'speed';
+interface DropEntry {
+  type: PowerUpType;
+  weight: number;
+}
+
+/** The historical 40/40/20 split, spelled as weights. Arena balance is
+ * untouched and the campaign-only items can never reach an online guest. */
+const DEATHMATCH_DROPS: DropEntry[] = [
+  { type: 'bomb', weight: 40 },
+  { type: 'flame', weight: 40 },
+  { type: 'speed', weight: 20 },
+];
+
+const CAMPAIGN_DROPS: DropEntry[] = [
+  { type: 'bomb', weight: 26 },
+  { type: 'flame', weight: 26 },
+  { type: 'speed', weight: 14 },
+  { type: 'bombpass', weight: 6 },
+  { type: 'flamepass', weight: 5 },
+  { type: 'wallpass', weight: 5 },
+  { type: 'detonator', weight: 4 },
+  { type: 'mystery', weight: 3 },
+  { type: 'life', weight: 2 },
+  { type: 'curse', weight: 9 },
+];
+
+/** Draws one power-up type. Exactly one rand() draw, whatever the mode. */
+export function rollPowerUp(state: GameState): PowerUpType {
+  const table = state.mode === 'campaign' ? CAMPAIGN_DROPS : DEATHMATCH_DROPS;
+  let total = 0;
+  for (const entry of table) total += entry.weight;
+
+  let roll = rand(state) * total;
+  for (const entry of table) {
+    roll -= entry.weight;
+    if (roll < 0) return entry.type;
+  }
+  return table[table.length - 1].type;
 }
 
 function updateFlames(state: GameState, dt: number): void {
