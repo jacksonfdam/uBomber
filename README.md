@@ -89,6 +89,7 @@ order alone gives a correct painter's y-sort.
 ## Repository layout
 
 ```
+index.html       Vite entry point
 src/core         Pure simulation (no renderer imports)
 src/ai           Bots
 src/net          Supabase Realtime multiplayer
@@ -97,9 +98,13 @@ src/render       Three.js renderer, procedural art, VFX, post
 src/audio        Web Audio synthesis
 src/ui           Menu, lobby, HUD (DOM)
 tests/           Vitest suites
+public/          Served at the site root (config.json lives here)
 supabase/        Database migrations + local stack config
 docs/            Architecture, multiplayer, maps, local dev, deployment
 ```
+
+That is the whole repository. There is no build pipeline beside Vite, no asset
+directory and no generated output under version control.
 
 ## Contributing
 
