@@ -46,13 +46,6 @@ const ARENA: MapDef = {
   name: 'Monster Arena',
   district: 'Test',
   description: 'Open arena used by the monster tests.',
-  theme: {
-    floor: '#ffffff',
-    wall: '#000000',
-    crate: '#888888',
-    flame: '#ff0000',
-    accent: '#00ff00',
-  },
   grid: [
     '###############',
     '#1...........2#',
