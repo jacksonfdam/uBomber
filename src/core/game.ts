@@ -33,6 +33,11 @@ import {
 } from './constants';
 import { approach, DIRS, isInside, tileOf } from './geometry';
 import { parseMap } from './map';
+import {
+  killMonstersInFlames,
+  monsterTouching,
+  updateMonsters,
+} from './monsters';
 import { rand, randInt } from './rng';
 import type {
   BombState,
@@ -191,9 +196,12 @@ export function step(
     pickUpPowerUp(state, p);
   }
 
+  updateMonsters(state, dt);
   updateBombs(state, dt);
   updateFlames(state, dt);
   killPlayersInFlames(state);
+  killMonstersInFlames(state);
+  killPlayersByMonsters(state);
   updateSuddenDeath(state);
   updateRespawns(state, dt);
   resolveOutcome(state, dt);
@@ -592,7 +600,37 @@ function killPlayersInFlames(state: GameState): void {
   }
 }
 
+/**
+ * A campaign stage is one player against the board, so the arena's "last one
+ * standing" rule does not apply: it ends when the player runs out of lives.
+ */
+function resolveCampaign(state: GameState): void {
+  const campaign = state.campaign;
+  if (!campaign) return;
+
+  const player = state.players[0];
+  if (player && !player.alive && player.lives <= 0) {
+    state.status = 'finished';
+    state.winner = null;
+    campaign.cleared = false;
+  }
+}
+
+/** Monster contact. Flame pass is no help here; only grace and mystery are. */
+function killPlayersByMonsters(state: GameState): void {
+  if (state.monsters.length === 0) return;
+  for (const p of state.players) {
+    if (!p.alive || p.invulnFor > 0 || p.invincibleFor > 0) continue;
+    if (!monsterTouching(state, p)) continue;
+    loseLife(state, p);
+  }
+}
+
 function resolveOutcome(state: GameState, _dt: number): void {
+  if (state.mode === 'campaign') {
+    resolveCampaign(state);
+    return;
+  }
   // Anyone alive or waiting on a respawn is still in the fight.
   const contenders = state.players.filter((p) => p.alive || p.lives > 0);
   if (contenders.length <= 1) {
