@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   BASE_SPEED,
   BOMB_FUSE,
+  CURSE_DURATION,
+  CURSE_MIN_RANGE,
+  CURSE_SHORT_FUSE,
+  CURSE_SLOW_SPEED,
   FLAME_TTL,
   MATCH_TIME_SECONDS,
+  MAX_LIVES,
+  MYSTERY_DURATION,
   RESPAWN_DELAY,
   RESPAWN_INVULN,
   SCORE_CRATE,
@@ -16,7 +22,15 @@ import {
   SUDDEN_DEATH_START,
   TICK_DT,
 } from '../src/core/constants';
-import { createGame, flameAt, step } from '../src/core/game';
+import {
+  createGame,
+  effectiveFuse,
+  effectiveRange,
+  effectiveSpeed,
+  flameAt,
+  rollPowerUp,
+  step,
+} from '../src/core/game';
 import { rand } from '../src/core/rng';
 import { IDLE_INPUT, type MapDef, type PlayerInput } from '../src/core/types';
 
@@ -77,6 +91,24 @@ describe('createGame', () => {
     expect(state.players[1].pos).toEqual({ x: 13.5, y: 1.5 });
     expect(state.players.every((p) => p.alive)).toBe(true);
     expect(state.status).toBe('running');
+  });
+
+  it('defaults to deathmatch with no campaign state and no monsters', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    expect(state.mode).toBe('deathmatch');
+    expect(state.campaign).toBeNull();
+    expect(state.monsters).toEqual([]);
+  });
+
+  it('starts players without any of the classic power-up effects', () => {
+    const [p] = createGame(TEST_MAP, TWO_PLAYERS, 1).players;
+    expect(p.detonator).toBe(false);
+    expect(p.wallPass).toBe(false);
+    expect(p.bombPass).toBe(false);
+    expect(p.flamePass).toBe(false);
+    expect(p.invincibleFor).toBe(0);
+    expect(p.curse).toBeNull();
+    expect(p.curseFor).toBe(0);
   });
 
   it('rejects rosters below 2 players', () => {
@@ -187,6 +219,227 @@ describe('power-ups', () => {
     state.powerups.push({ x: 2, y: 1, type: 'bomb' });
     run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
     expect(state.players[0].bombCap).toBe(2);
+  });
+
+  it('grants the pass abilities and the detonator', () => {
+    for (const [type, field] of [
+      ['detonator', 'detonator'],
+      ['wallpass', 'wallPass'],
+      ['bombpass', 'bombPass'],
+      ['flamepass', 'flamePass'],
+    ] as const) {
+      const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+      state.powerups.push({ x: 2, y: 1, type });
+      run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+      expect(state.players[0][field]).toBe(true);
+    }
+  });
+
+  it('starts the invincibility clock with a mystery power-up', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.powerups.push({ x: 2, y: 1, type: 'mystery' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].invincibleFor).toBeGreaterThan(MYSTERY_DURATION - 1);
+  });
+
+  it('adds a life and caps it at MAX_LIVES', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.powerups.push({ x: 2, y: 1, type: 'life' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].lives).toBe(2);
+    expect(state.players[0].maxLives).toBe(2);
+
+    state.players[0].lives = MAX_LIVES;
+    state.powerups.push({ x: 3, y: 1, type: 'life' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].lives).toBe(MAX_LIVES);
+  });
+
+  it('curses the player who picks up a skull', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.powerups.push({ x: 2, y: 1, type: 'curse' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].curse).not.toBeNull();
+    expect(state.players[0].curseFor).toBeGreaterThan(CURSE_DURATION - 1);
+  });
+});
+
+describe('drop tables', () => {
+  /** The 40/40/20 split as it was written before the weighted tables landed. */
+  function legacyRoll(carrier: { rngState: number }): string {
+    const roll = rand(carrier);
+    if (roll < 0.4) return 'bomb';
+    if (roll < 0.8) return 'flame';
+    return 'speed';
+  }
+
+  it('draws the same arena sequence as before the weighted tables', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 4242);
+    const legacy = { rngState: state.rngState };
+
+    for (let i = 0; i < 200; i++) {
+      expect(rollPowerUp(state)).toBe(legacyRoll(legacy));
+      // One draw each, so the two carriers stay in lockstep.
+      expect(state.rngState).toBe(legacy.rngState);
+    }
+  });
+
+  it('never drops a campaign-only power-up in the arena', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 7);
+    for (let i = 0; i < 500; i++) {
+      expect(['bomb', 'flame', 'speed']).toContain(rollPowerUp(state));
+    }
+  });
+});
+
+describe('detonator', () => {
+  function holdingDetonator() {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].detonator = true;
+    state.players[0].bombCap = 3;
+    // Out of its own blast, so the detonation does not end the match.
+    state.players[1].pos = { x: 13.5, y: 11.5 };
+    return state;
+  }
+
+  it('marks placed bombs as remote and freezes their fuse', () => {
+    const state = holdingDetonator();
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: true }), TICK_DT);
+    expect(state.bombs[0].remote).toBe(true);
+
+    run(state, [], BOMB_FUSE * 2);
+    expect(state.bombs).toHaveLength(1);
+  });
+
+  it('detonates on the trigger tick', () => {
+    const state = holdingDetonator();
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: true }), TICK_DT);
+    state.players[0].pos = { x: 7.5, y: 7.5 };
+
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: false, detonate: true }), TICK_DT);
+    expect(state.bombs).toHaveLength(0);
+    expect(flameAt(state, 1, 1)).toBe(true);
+  });
+
+  it('pops the oldest bomb first, one per press', () => {
+    const state = holdingDetonator();
+    state.bombs.push({ id: 7, owner: 0, x: 5, y: 5, fuse: 99, range: 1, remote: true });
+    state.bombs.push({ id: 9, owner: 0, x: 9, y: 9, fuse: 99, range: 1, remote: true });
+    state.players[0].activeBombs = 2;
+    state.players[0].pos = { x: 1.5, y: 7.5 };
+
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: false, detonate: true }), TICK_DT);
+    expect(state.bombs.map((b) => b.id)).toEqual([9]);
+  });
+
+  it('still chains when caught in another blast', () => {
+    const state = holdingDetonator();
+    state.bombs.push({ id: 7, owner: 0, x: 3, y: 1, fuse: 99, range: 1, remote: true });
+    state.bombs.push({ id: 8, owner: 1, x: 1, y: 1, fuse: 0.01, range: 4 });
+    state.players[0].pos = { x: 7.5, y: 7.5 };
+
+    step(state, [], TICK_DT);
+    expect(state.bombs).toHaveLength(0);
+    expect(flameAt(state, 4, 1)).toBe(true);
+  });
+});
+
+describe('pass power-ups', () => {
+  it('walks through crates only with wall pass', () => {
+    const blocked = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    blocked.grid[1][3] = 'crate';
+    run(blocked, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(blocked.players[0].pos.x).toBeLessThan(3);
+
+    const passing = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    passing.grid[1][3] = 'crate';
+    passing.players[0].wallPass = true;
+    run(passing, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(passing.players[0].pos.x).toBeGreaterThan(4);
+  });
+
+  it('walks back onto a bomb only with bomb pass', () => {
+    const blocked = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    blocked.bombs.push({ id: 1, owner: 1, x: 3, y: 1, fuse: 99, range: 1 });
+    run(blocked, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(blocked.players[0].pos.x).toBeLessThan(3);
+
+    const passing = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    passing.bombs.push({ id: 1, owner: 1, x: 3, y: 1, fuse: 99, range: 1 });
+    passing.players[0].bombPass = true;
+    run(passing, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(passing.players[0].pos.x).toBeGreaterThan(4);
+  });
+
+  it('survives flames with flame pass', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].flamePass = true;
+    state.flames.push({ x: 1, y: 1, ttl: FLAME_TTL, owner: 1 });
+    step(state, [], TICK_DT);
+    expect(state.players[0].alive).toBe(true);
+  });
+
+  it('survives flames while mystery invincibility lasts, then dies', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].invincibleFor = 0.5;
+    state.flames.push({ x: 1, y: 1, ttl: 99, owner: 1 });
+
+    step(state, [], TICK_DT);
+    expect(state.players[0].alive).toBe(true);
+
+    run(state, [], 1);
+    expect(state.players[0].alive).toBe(false);
+  });
+});
+
+describe('curses', () => {
+  it('reports base stats while uncursed', () => {
+    const [p] = createGame(TEST_MAP, TWO_PLAYERS, 1).players;
+    expect(effectiveSpeed(p)).toBe(BASE_SPEED);
+    expect(effectiveRange(p)).toBe(p.flameRange);
+    expect(effectiveFuse(p)).toBe(BOMB_FUSE);
+  });
+
+  it('overrides speed, range and fuse while cursed', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    const p = state.players[0];
+
+    p.curse = 'slow';
+    expect(effectiveSpeed(p)).toBe(CURSE_SLOW_SPEED);
+    p.curse = 'min-range';
+    expect(effectiveRange(p)).toBe(CURSE_MIN_RANGE);
+    p.curse = 'short-fuse';
+    expect(effectiveFuse(p)).toBe(CURSE_SHORT_FUSE);
+  });
+
+  it('slows the player down for real', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].curse = 'slow';
+    state.players[0].curseFor = CURSE_DURATION;
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(state.players[0].pos.x).toBeCloseTo(1.5 + CURSE_SLOW_SPEED, 1);
+  });
+
+  it('wears off after CURSE_DURATION', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].curse = 'slow';
+    state.players[0].curseFor = CURSE_DURATION;
+
+    run(state, [], CURSE_DURATION - 1);
+    expect(state.players[0].curse).toBe('slow');
+
+    run(state, [], 1.5);
+    expect(state.players[0].curse).toBeNull();
+    expect(state.players[0].curseFor).toBe(0);
+  });
+
+  it('drops bombs on its own under the bomb-drop curse', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].curse = 'bomb-drop';
+    state.players[0].curseFor = CURSE_DURATION;
+
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: false }), TICK_DT);
+    expect(state.bombs).toHaveLength(1);
   });
 });
 
