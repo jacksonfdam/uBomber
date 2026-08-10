@@ -8,6 +8,8 @@ import {
   CURSE_MIN_RANGE,
   CURSE_SHORT_FUSE,
   CURSE_SLOW_SPEED,
+  EXIT_ENRAGE_MAX,
+  EXIT_ENRAGE_MONSTERS,
   FLAME_TTL,
   MATCH_TIME_SECONDS,
   MAX_BOMB_CAP,
@@ -23,28 +25,36 @@ import {
   SCORE_CRATE,
   SCORE_KILL,
   SCORE_POWERUP,
+  SCORE_STAGE_CLEAR,
   SCORE_SUICIDE,
+  SCORE_TIME_BONUS,
   SCORE_WIN,
   SPEED_INCREMENT,
   SUDDEN_DEATH_INTERVAL,
   SUDDEN_DEATH_START,
   TILE_COLS,
   TILE_ROWS,
+  TIME_UP_MONSTERS,
 } from './constants';
 import { approach, DIRS, isInside, tileOf } from './geometry';
 import { parseMap } from './map';
 import {
   killMonstersInFlames,
   monsterTouching,
+  spawnMonsters,
+  tilesAround,
+  tilesFarFrom,
   updateMonsters,
 } from './monsters';
 import { rand, randInt } from './rng';
 import type {
   BombState,
+  CampaignState,
   CurseKind,
   GameState,
   MapDef,
   MatchConfig,
+  MonsterSpecies,
   PlayerInput,
   PlayerState,
   PowerUpType,
@@ -202,7 +212,9 @@ export function step(
   killPlayersInFlames(state);
   killMonstersInFlames(state);
   killPlayersByMonsters(state);
-  updateSuddenDeath(state);
+  // Sudden death would wall over the exit door, so it is arena-only.
+  if (state.mode === 'deathmatch') updateSuddenDeath(state);
+  updateCampaignTimer(state);
   updateRespawns(state, dt);
   resolveOutcome(state, dt);
 }
@@ -529,16 +541,80 @@ function updateBombs(state: GameState, dt: number): void {
 
   // Crates burn down after flames are laid so a crate's own power-up is not
   // consumed by the blast that revealed it.
+  const campaign = state.campaign;
+  // Checked before the crates burn, so the blast that uncovers the door does
+  // not also count as angering it.
+  if (campaign) enrageExit(state, campaign, flameTiles);
+
   for (const c of crushedCrates) {
     state.grid[c.y][c.x] = 'floor';
     const owner = state.players[c.owner];
     if (owner) owner.score += SCORE_CRATE;
+
+    // The two special crates skip the drop roll entirely, which is also what
+    // keeps the arena's draw order untouched.
+    if (campaign && campaign.exit.x === c.x && campaign.exit.y === c.y) {
+      campaign.exitRevealed = true;
+      continue;
+    }
+    if (
+      campaign &&
+      campaign.hidden &&
+      campaign.hidden.x === c.x &&
+      campaign.hidden.y === c.y
+    ) {
+      state.powerups.push({ x: c.x, y: c.y, type: campaign.hidden.type });
+      campaign.hidden = null;
+      continue;
+    }
+
     const chance =
       state.mode === 'campaign' ? CAMPAIGN_DROP_CHANCE : POWERUP_DROP_CHANCE;
     if (rand(state) < chance) {
       state.powerups.push({ x: c.x, y: c.y, type: rollPowerUp(state) });
     }
   }
+}
+
+/** Species the exit spits out when you bomb it, hardest the game has so far. */
+function enrageSpecies(round: number): MonsterSpecies {
+  if (round >= 4) return 'pontan';
+  if (round >= 3) return 'pass';
+  return 'minvo';
+}
+
+/**
+ * Classic rule: blasting a revealed exit angers it and it coughs up more
+ * monsters. Three times is enough to teach the lesson.
+ */
+function enrageExit(
+  state: GameState,
+  campaign: CampaignState,
+  flameTiles: Array<Vec2 & { owner: number }>
+): void {
+  if (!campaign.exitRevealed || campaign.exitEnraged >= EXIT_ENRAGE_MAX) return;
+  const hit = flameTiles.some(
+    (f) => f.x === campaign.exit.x && f.y === campaign.exit.y
+  );
+  if (!hit) return;
+
+  campaign.exitEnraged++;
+  spawnMonsters(
+    state,
+    enrageSpecies(campaign.round),
+    tilesAround(state, campaign.exit, EXIT_ENRAGE_MONSTERS)
+  );
+}
+
+/** Once the clock runs out the stage does not end: pontans flood it instead. */
+function updateCampaignTimer(state: GameState): void {
+  const campaign = state.campaign;
+  if (!campaign || campaign.timeUp || state.time < campaign.timeLimit) return;
+
+  campaign.timeUp = true;
+  const player = state.players[0];
+  const from = player ? tileOf(player.pos) : campaign.exit;
+  spawnMonsters(state, 'pontan', tilesFarFrom(state, from, TIME_UP_MONSTERS));
 }
 
 interface DropEntry {
@@ -609,11 +685,26 @@ function resolveCampaign(state: GameState): void {
   if (!campaign) return;
 
   const player = state.players[0];
-  if (player && !player.alive && player.lives <= 0) {
+  if (!player) return;
+
+  if (!player.alive && player.lives <= 0) {
     state.status = 'finished';
     state.winner = null;
     campaign.cleared = false;
+    return;
   }
+
+  // The door only takes you once every monster on the stage is gone.
+  if (!player.alive || !campaign.exitRevealed) return;
+  if (state.monsters.some((m) => m.alive)) return;
+  const here = tileOf(player.pos);
+  if (here.x !== campaign.exit.x || here.y !== campaign.exit.y) return;
+
+  campaign.cleared = true;
+  state.status = 'finished';
+  state.winner = player.id;
+  const left = Math.max(0, Math.floor(campaign.timeLimit - state.time));
+  player.score += SCORE_STAGE_CLEAR + left * SCORE_TIME_BONUS;
 }
 
 /** Monster contact. Flame pass is no help here; only grace and mystery are. */
