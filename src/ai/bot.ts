@@ -78,7 +78,9 @@ export class BotController {
 
     const bomb = this.wantBomb;
     this.wantBomb = false;
-    return { ...this.followPath(me), bomb };
+    const move = this.followPath(me);
+    const detonate = shouldDetonate(state, me, here);
+    return detonate ? { ...move, bomb, detonate } : { ...move, bomb };
   }
 
   private plan(
@@ -149,7 +151,7 @@ export class BotController {
   private shouldBomb(state: GameState, me: PlayerState, here: Vec2): boolean {
     if (me.activeBombs >= me.bombCap) return false;
     if (bombAt(state, here.x, here.y)) return false;
-    if (!blastHitsTarget(state, me, here)) return false;
+    if (!blastHitsTarget(state, me.id, here, me.flameRange)) return false;
     // Easy bots let shots go by. Hashed rather than drawn so the RNG the
     // simulation shares with every peer is never touched.
     if (
@@ -193,6 +195,57 @@ export class BotController {
   }
 }
 
+/** How imminent a remote bomb is assumed to be. Pessimistic by design. */
+const REMOTE_DANGER_AT = 0.5;
+
+/**
+ * Presses the detonator when the oldest remote bomb is worth setting off and
+ * the bot is standing clear of its cross.
+ */
+function shouldDetonate(
+  state: GameState,
+  me: PlayerState,
+  here: Vec2
+): boolean {
+  if (!me.detonator) return false;
+
+  let oldest: { x: number; y: number; range: number } | undefined;
+  let oldestId = Infinity;
+  for (const b of state.bombs) {
+    if (b.owner !== me.id || !b.remote || b.id >= oldestId) continue;
+    oldestId = b.id;
+    oldest = { x: b.x, y: b.y, range: b.range };
+  }
+  if (!oldest) return false;
+
+  const blast = blastTiles(state, oldest);
+  if (blast.has(`${here.x},${here.y}`)) return false;
+  return blastHitsTarget(
+    state,
+    me.id,
+    { x: oldest.x, y: oldest.y },
+    oldest.range
+  );
+}
+
+/** Tiles a bomb at `at` would set on fire, its own tile included. */
+function blastTiles(
+  state: GameState,
+  at: { x: number; y: number; range: number }
+): Set<string> {
+  const tiles = new Set<string>([`${at.x},${at.y}`]);
+  for (const dir of DIRS) {
+    for (let r = 1; r <= at.range; r++) {
+      const x = at.x + dir.x * r;
+      const y = at.y + dir.y * r;
+      if (outOfBounds(x, y) || state.grid[y][x] === 'wall') break;
+      tiles.add(`${x},${y}`);
+      if (state.grid[y][x] === 'crate') break;
+    }
+  }
+  return tiles;
+}
+
 interface HypotheticalBomb {
   x: number;
   y: number;
@@ -220,7 +273,9 @@ export function dangerMap(
     x: b.x,
     y: b.y,
     range: b.range,
-    at: Math.max(0, b.fuse),
+    // A remote bomb has no fuse to read, and its owner can pop it at any
+    // moment, so treat it as almost due rather than as harmless forever.
+    at: b.remote ? REMOTE_DANGER_AT : Math.max(0, b.fuse),
   }));
   if (extra) bombs.push({ ...extra, at: BOMB_FUSE });
 
@@ -507,12 +562,13 @@ function reconstruct(
 
 function blastHitsTarget(
   state: GameState,
-  me: PlayerState,
-  here: Vec2
+  meId: number,
+  here: Vec2,
+  range: number
 ): boolean {
   const enemyTiles = new Set(
     state.players
-      .filter((p) => p.alive && p.id !== me.id)
+      .filter((p) => p.alive && p.id !== meId)
       .map((p) => {
         const t = tileOf(p.pos);
         return `${t.x},${t.y}`;
@@ -524,7 +580,7 @@ function blastHitsTarget(
   if (enemyTiles.has(`${here.x},${here.y}`)) return true;
 
   for (const dir of DIRS) {
-    for (let r = 1; r <= me.flameRange; r++) {
+    for (let r = 1; r <= range; r++) {
       const x = here.x + dir.x * r;
       const y = here.y + dir.y * r;
       if (outOfBounds(x, y) || state.grid[y][x] === 'wall') break;

@@ -203,6 +203,76 @@ function countCrates(state: GameState): number {
   return state.grid.flat().filter((t) => t === 'crate').length;
 }
 
+describe('detonator bombs', () => {
+  function duel() {
+    return createGame(
+      OPEN_MAP,
+      [
+        { kind: 'bot', name: 'A' },
+        { kind: 'bot', name: 'B' },
+      ],
+      5
+    );
+  }
+
+  it('treats a remote bomb as an imminent threat, not a safe tile', () => {
+    const state = duel();
+    state.bombs.push({
+      id: 1,
+      owner: 1,
+      x: 5,
+      y: 5,
+      fuse: 999,
+      range: 2,
+      remote: true,
+    });
+
+    const danger = dangerMap(state);
+    expect(danger[5][5]).toBeLessThan(1);
+    expect(danger[5][7]).toBeLessThan(1);
+  });
+
+  it('triggers a bomb that covers a target once it is clear of the blast', () => {
+    const state = duel();
+    state.players[0].detonator = true;
+    state.players[0].pos = { x: 1.5, y: 5.5 };
+    state.players[1].pos = { x: 5.5, y: 5.5 };
+    state.bombs.push({
+      id: 1,
+      owner: 0,
+      x: 5,
+      y: 5,
+      fuse: 999,
+      range: 2,
+      remote: true,
+    });
+    state.players[0].activeBombs = 1;
+
+    const bot = new BotController(0);
+    expect(bot.update(state, TICK_DT).detonate).toBe(true);
+  });
+
+  it('holds the trigger while standing in the blast', () => {
+    const state = duel();
+    state.players[0].detonator = true;
+    state.players[0].pos = { x: 5.5, y: 6.5 };
+    state.players[1].pos = { x: 5.5, y: 5.5 };
+    state.bombs.push({
+      id: 1,
+      owner: 0,
+      x: 5,
+      y: 5,
+      fuse: 999,
+      range: 2,
+      remote: true,
+    });
+    state.players[0].activeBombs = 1;
+
+    const bot = new BotController(0);
+    expect(bot.update(state, TICK_DT).detonate).toBeUndefined();
+  });
+});
+
 describe('bot difficulty', () => {
   function fourBots(seed: number) {
     return createGame(
