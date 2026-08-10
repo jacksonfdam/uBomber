@@ -3,15 +3,17 @@ import {
   CAMPAIGN_STAGES,
   MAX_SLOTS,
   ROUNDS_PER_THEME,
+  TICK_DT,
   TILE_COLS,
   TILE_ROWS,
 } from '../src/core/constants';
-import { createGame } from '../src/core/game';
+import { campaignSeed, stageMapId, stageRound } from '../src/core/campaign';
+import { createGame, step } from '../src/core/game';
 import { DIRS } from '../src/core/geometry';
 import { parseMap } from '../src/core/map';
 import { generateStage, stageAt } from '../src/core/stage';
 import type { MapDef, Tile, Vec2 } from '../src/core/types';
-import { MAPS } from '../src/maps';
+import { MAPS, MAP_IDS } from '../src/maps';
 
 const THEMES: MapDef[] = MAPS.map((entry) => entry.def);
 
@@ -162,6 +164,44 @@ describe('stage generation', () => {
       crates = count;
       monsters = campaign.monsters.length;
       timeLimit = campaign.timeLimit;
+    }
+  });
+
+  it('plays every stage of the ladder without breaking', () => {
+    for (let stage = 1; stage <= CAMPAIGN_STAGES; stage++) {
+      const seed = campaignSeed(stage);
+      const { def, campaign } = generateStage(
+        THEMES[stageAt(stage, THEMES.length).themeIndex],
+        stageRound(stage, THEMES.length),
+        stage,
+        seed,
+        'normal'
+      );
+      const state = createGame(
+        def,
+        [{ kind: 'human', name: 'P', lives: 3 }],
+        seed,
+        { mode: 'campaign', campaign }
+      );
+
+      const ticks = Math.round(30 / TICK_DT);
+      for (let i = 0; i < ticks && state.status === 'running'; i++) {
+        step(
+          state,
+          [
+            {
+              dx: i % 60 < 30 ? 1 : 0,
+              dy: i % 60 < 30 ? 0 : 1,
+              bomb: i % 25 === 0,
+            },
+          ],
+          TICK_DT
+        );
+      }
+      expect(state.campaign?.stage).toBe(stage);
+      expect(stageMapId(MAP_IDS, stage)).toBe(
+        MAP_IDS[stageAt(stage, THEMES.length).themeIndex]
+      );
     }
   });
 
