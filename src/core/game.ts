@@ -327,9 +327,12 @@ function isSolidFor(
   p: PlayerState
 ): boolean {
   if (!isInside(x, y)) return true;
-  if (state.grid[y][x] !== 'floor') return true;
+  const tile = state.grid[y][x];
+  if (tile === 'wall') return true;
+  if (tile === 'crate') return !p.wallPass;
   const bomb = bombAt(state, x, y);
   if (!bomb) return false;
+  if (p.bombPass) return false;
   const here = tileOf(p.pos);
   return !(here.x === x && here.y === y);
 }
@@ -508,6 +511,7 @@ function updateFlames(state: GameState, dt: number): void {
 function killPlayersInFlames(state: GameState): void {
   for (const p of state.players) {
     if (!p.alive || p.invulnFor > 0) continue;
+    if (p.flamePass || p.invincibleFor > 0) continue;
     const here = tileOf(p.pos);
     const flame = state.flames.find((f) => f.x === here.x && f.y === here.y);
     if (!flame) continue;

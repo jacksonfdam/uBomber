@@ -219,6 +219,54 @@ describe('power-ups', () => {
   });
 });
 
+describe('pass power-ups', () => {
+  it('walks through crates only with wall pass', () => {
+    const blocked = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    blocked.grid[1][3] = 'crate';
+    run(blocked, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(blocked.players[0].pos.x).toBeLessThan(3);
+
+    const passing = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    passing.grid[1][3] = 'crate';
+    passing.players[0].wallPass = true;
+    run(passing, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(passing.players[0].pos.x).toBeGreaterThan(4);
+  });
+
+  it('walks back onto a bomb only with bomb pass', () => {
+    const blocked = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    blocked.bombs.push({ id: 1, owner: 1, x: 3, y: 1, fuse: 99, range: 1 });
+    run(blocked, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(blocked.players[0].pos.x).toBeLessThan(3);
+
+    const passing = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    passing.bombs.push({ id: 1, owner: 1, x: 3, y: 1, fuse: 99, range: 1 });
+    passing.players[0].bombPass = true;
+    run(passing, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 1);
+    expect(passing.players[0].pos.x).toBeGreaterThan(4);
+  });
+
+  it('survives flames with flame pass', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].flamePass = true;
+    state.flames.push({ x: 1, y: 1, ttl: FLAME_TTL, owner: 1 });
+    step(state, [], TICK_DT);
+    expect(state.players[0].alive).toBe(true);
+  });
+
+  it('survives flames while mystery invincibility lasts, then dies', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].invincibleFor = 0.5;
+    state.flames.push({ x: 1, y: 1, ttl: 99, owner: 1 });
+
+    step(state, [], TICK_DT);
+    expect(state.players[0].alive).toBe(true);
+
+    run(state, [], 1);
+    expect(state.players[0].alive).toBe(false);
+  });
+});
+
 describe('curses', () => {
   it('reports base stats while uncursed', () => {
     const [p] = createGame(TEST_MAP, TWO_PLAYERS, 1).players;
