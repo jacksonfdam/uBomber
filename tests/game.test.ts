@@ -219,6 +219,58 @@ describe('power-ups', () => {
   });
 });
 
+describe('detonator', () => {
+  function holdingDetonator() {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.players[0].detonator = true;
+    state.players[0].bombCap = 3;
+    // Out of its own blast, so the detonation does not end the match.
+    state.players[1].pos = { x: 13.5, y: 11.5 };
+    return state;
+  }
+
+  it('marks placed bombs as remote and freezes their fuse', () => {
+    const state = holdingDetonator();
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: true }), TICK_DT);
+    expect(state.bombs[0].remote).toBe(true);
+
+    run(state, [], BOMB_FUSE * 2);
+    expect(state.bombs).toHaveLength(1);
+  });
+
+  it('detonates on the trigger tick', () => {
+    const state = holdingDetonator();
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: true }), TICK_DT);
+    state.players[0].pos = { x: 7.5, y: 7.5 };
+
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: false, detonate: true }), TICK_DT);
+    expect(state.bombs).toHaveLength(0);
+    expect(flameAt(state, 1, 1)).toBe(true);
+  });
+
+  it('pops the oldest bomb first, one per press', () => {
+    const state = holdingDetonator();
+    state.bombs.push({ id: 7, owner: 0, x: 5, y: 5, fuse: 99, range: 1, remote: true });
+    state.bombs.push({ id: 9, owner: 0, x: 9, y: 9, fuse: 99, range: 1, remote: true });
+    state.players[0].activeBombs = 2;
+    state.players[0].pos = { x: 1.5, y: 7.5 };
+
+    step(state, inputsFor(0, { dx: 0, dy: 0, bomb: false, detonate: true }), TICK_DT);
+    expect(state.bombs.map((b) => b.id)).toEqual([9]);
+  });
+
+  it('still chains when caught in another blast', () => {
+    const state = holdingDetonator();
+    state.bombs.push({ id: 7, owner: 0, x: 3, y: 1, fuse: 99, range: 1, remote: true });
+    state.bombs.push({ id: 8, owner: 1, x: 1, y: 1, fuse: 0.01, range: 4 });
+    state.players[0].pos = { x: 7.5, y: 7.5 };
+
+    step(state, [], TICK_DT);
+    expect(state.bombs).toHaveLength(0);
+    expect(flameAt(state, 4, 1)).toBe(true);
+  });
+});
+
 describe('pass power-ups', () => {
   it('walks through crates only with wall pass', () => {
     const blocked = createGame(TEST_MAP, TWO_PLAYERS, 1);

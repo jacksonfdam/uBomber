@@ -183,6 +183,8 @@ export function step(
     movePlayer(state, p, input, dt);
     // The bomb-drop curse presses the button for you.
     if (input.bomb || p.curse === 'bomb-drop') tryPlaceBomb(state, p);
+    // Runs before updateBombs so the blast lands on the same tick as the press.
+    if (input.detonate === true) triggerDetonator(state, p);
     pickUpPowerUp(state, p);
   }
 
@@ -397,8 +399,23 @@ function tryPlaceBomb(state: GameState, p: PlayerState): void {
     y: here.y,
     fuse: effectiveFuse(p),
     range: effectiveRange(p),
+    // Left undefined without the detonator so ordinary bombs serialize as before.
+    remote: p.detonator || undefined,
   });
   p.activeBombs++;
+}
+
+/** Pops this player's oldest remote bomb, the classic one-press-per-bomb feel. */
+function triggerDetonator(state: GameState, p: PlayerState): void {
+  if (!p.detonator) return;
+  let oldest: BombState | undefined;
+  for (const b of state.bombs) {
+    if (b.owner !== p.id || !b.remote) continue;
+    if (!oldest || b.id < oldest.id) oldest = b;
+  }
+  if (!oldest) return;
+  oldest.fuse = 0;
+  oldest.remote = false;
 }
 
 function pickUpPowerUp(state: GameState, p: PlayerState): void {
@@ -425,7 +442,8 @@ function applyPowerUp(p: PlayerState, type: PowerUpType): void {
 }
 
 function updateBombs(state: GameState, dt: number): void {
-  for (const b of state.bombs) b.fuse -= dt;
+  // Remote bombs hold their fuse until triggered, but a blast still chains them.
+  for (const b of state.bombs) if (!b.remote) b.fuse -= dt;
 
   const queue = state.bombs.filter((b) => b.fuse <= 0);
   if (queue.length === 0) return;
@@ -455,6 +473,7 @@ function updateBombs(state: GameState, dt: number): void {
         const other = bombAt(state, x, y);
         if (other && !exploded.has(other.id)) {
           other.fuse = 0;
+          other.remote = false;
           queue.push(other);
           flameTiles.push({ x, y, owner: bomb.owner });
           break;
