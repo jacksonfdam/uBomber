@@ -31,6 +31,7 @@ import {
   TILE_COLS,
   TILE_ROWS,
 } from './constants';
+import { approach, DIRS, isInside, tileOf } from './geometry';
 import { parseMap } from './map';
 import { rand, randInt } from './rng';
 import type {
@@ -47,12 +48,9 @@ import type {
 } from './types';
 
 const EPS = 1e-4;
-const DIRS: Vec2[] = [
-  { x: 1, y: 0 },
-  { x: -1, y: 0 },
-  { x: 0, y: 1 },
-  { x: 0, y: -1 },
-];
+
+// Re-exported so existing importers (bots, renderer, tests) keep working.
+export { approach, DIRS, isInside, tileOf };
 
 const DEATHMATCH: MatchConfig = { mode: 'deathmatch' };
 
@@ -304,10 +302,6 @@ function updateSuddenDeath(state: GameState): void {
   }
 }
 
-export function tileOf(pos: Vec2): Vec2 {
-  return { x: Math.floor(pos.x), y: Math.floor(pos.y) };
-}
-
 export function bombAt(
   state: GameState,
   x: number,
@@ -318,10 +312,6 @@ export function bombAt(
 
 export function flameAt(state: GameState, x: number, y: number): boolean {
   return state.flames.some((f) => f.x === x && f.y === y);
-}
-
-function isInside(x: number, y: number): boolean {
-  return x >= 0 && y >= 0 && x < TILE_COLS && y < TILE_ROWS;
 }
 
 /** A tile blocks `p` if it is a wall, a crate, or a bomb the player is not
@@ -379,15 +369,6 @@ function movePlayer(
       ny = dy > 0 ? edgeTile - PLAYER_RADIUS - EPS : edgeTile + 1 + PLAYER_RADIUS + EPS;
     }
     p.pos.y = ny;
-  }
-}
-
-function approach(pos: Vec2, axis: 'x' | 'y', target: number, maxDelta: number): void {
-  const diff = target - pos[axis];
-  if (Math.abs(diff) <= maxDelta) {
-    pos[axis] = target;
-  } else {
-    pos[axis] += Math.sign(diff) * maxDelta;
   }
 }
 
