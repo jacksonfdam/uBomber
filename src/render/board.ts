@@ -405,7 +405,12 @@ export class BoardRenderer {
     // --- row-by-row: blocks, bombs, characters
     const playersByRow: PlayerVisual[][] = Array.from({ length: TILE_ROWS }, () => []);
     for (const v of visuals) {
-      const row = Math.min(TILE_ROWS - 1, Math.max(0, Math.floor(v.y)));
+      // Bucket by the sprite's own baseline, which is where its quad is
+      // bottom-aligned (see `bottom` below) — not by the tile the character
+      // occupies. Those two disagree by a whole row across the lower half of
+      // every tile, and in that half the next row's blocks were filled after
+      // the character and cut a band across its body as it walked.
+      const row = Math.min(TILE_ROWS - 1, Math.max(0, Math.floor(v.y + 0.5)));
       playersByRow[row].push(v);
     }
 
@@ -414,7 +419,12 @@ export class BoardRenderer {
       () => []
     );
     for (const b of state.bombs) {
-      if (b.y >= 0 && b.y < TILE_ROWS) bombsByRow[b.y].push(b);
+      // Same baseline rule as the characters: a bomb's quad is bottom-aligned
+      // to `b.y + 1`, so it belongs in that row's pass. Filing it under `b.y`
+      // let the block one row down — filled afterwards — cover the top half of
+      // the bomb, hiding the fuse that tells you how long you have.
+      const row = Math.min(TILE_ROWS - 1, b.y + 1);
+      if (b.y >= 0 && b.y < TILE_ROWS) bombsByRow[row].push(b);
     }
 
     for (let r = 0; r < TILE_ROWS; r++) {
