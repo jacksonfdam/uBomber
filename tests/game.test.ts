@@ -8,6 +8,8 @@ import {
   CURSE_SLOW_SPEED,
   FLAME_TTL,
   MATCH_TIME_SECONDS,
+  MAX_LIVES,
+  MYSTERY_DURATION,
   RESPAWN_DELAY,
   RESPAWN_INVULN,
   SCORE_CRATE,
@@ -216,6 +218,48 @@ describe('power-ups', () => {
     state.powerups.push({ x: 2, y: 1, type: 'bomb' });
     run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
     expect(state.players[0].bombCap).toBe(2);
+  });
+
+  it('grants the pass abilities and the detonator', () => {
+    for (const [type, field] of [
+      ['detonator', 'detonator'],
+      ['wallpass', 'wallPass'],
+      ['bombpass', 'bombPass'],
+      ['flamepass', 'flamePass'],
+    ] as const) {
+      const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+      state.powerups.push({ x: 2, y: 1, type });
+      run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+      expect(state.players[0][field]).toBe(true);
+    }
+  });
+
+  it('starts the invincibility clock with a mystery power-up', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.powerups.push({ x: 2, y: 1, type: 'mystery' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].invincibleFor).toBeGreaterThan(MYSTERY_DURATION - 1);
+  });
+
+  it('adds a life and caps it at MAX_LIVES', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.powerups.push({ x: 2, y: 1, type: 'life' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].lives).toBe(2);
+    expect(state.players[0].maxLives).toBe(2);
+
+    state.players[0].lives = MAX_LIVES;
+    state.powerups.push({ x: 3, y: 1, type: 'life' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].lives).toBe(MAX_LIVES);
+  });
+
+  it('curses the player who picks up a skull', () => {
+    const state = createGame(TEST_MAP, TWO_PLAYERS, 1);
+    state.powerups.push({ x: 2, y: 1, type: 'curse' });
+    run(state, inputsFor(0, { dx: 1, dy: 0, bomb: false }), 0.5);
+    expect(state.players[0].curse).not.toBeNull();
+    expect(state.players[0].curseFor).toBeGreaterThan(CURSE_DURATION - 1);
   });
 });
 

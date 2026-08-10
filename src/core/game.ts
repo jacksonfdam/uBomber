@@ -3,6 +3,7 @@ import {
   BASE_FLAME_RANGE,
   BASE_SPEED,
   BOMB_FUSE,
+  CURSE_DURATION,
   CURSE_MIN_RANGE,
   CURSE_SHORT_FUSE,
   CURSE_SLOW_SPEED,
@@ -10,8 +11,10 @@ import {
   MATCH_TIME_SECONDS,
   MAX_BOMB_CAP,
   MAX_FLAME_RANGE,
+  MAX_LIVES,
   MAX_SLOTS,
   MAX_SPEED,
+  MYSTERY_DURATION,
   PLAYER_RADIUS,
   POWERUP_DROP_CHANCE,
   RESPAWN_DELAY,
@@ -28,9 +31,10 @@ import {
   TILE_ROWS,
 } from './constants';
 import { parseMap } from './map';
-import { rand } from './rng';
+import { rand, randInt } from './rng';
 import type {
   BombState,
+  CurseKind,
   GameState,
   MapDef,
   MatchConfig,
@@ -423,11 +427,18 @@ function pickUpPowerUp(state: GameState, p: PlayerState): void {
   const idx = state.powerups.findIndex((u) => u.x === here.x && u.y === here.y);
   if (idx === -1) return;
   const [taken] = state.powerups.splice(idx, 1);
-  applyPowerUp(p, taken.type);
+  applyPowerUp(state, p, taken.type);
   p.score += SCORE_POWERUP;
 }
 
-function applyPowerUp(p: PlayerState, type: PowerUpType): void {
+/** One skull item; which curse you get is rolled when you touch it. */
+const CURSES: CurseKind[] = ['short-fuse', 'min-range', 'slow', 'bomb-drop'];
+
+function applyPowerUp(
+  state: GameState,
+  p: PlayerState,
+  type: PowerUpType
+): void {
   switch (type) {
     case 'bomb':
       p.bombCap = Math.min(MAX_BOMB_CAP, p.bombCap + 1);
@@ -437,6 +448,29 @@ function applyPowerUp(p: PlayerState, type: PowerUpType): void {
       break;
     case 'speed':
       p.speed = Math.min(MAX_SPEED, p.speed + SPEED_INCREMENT);
+      break;
+    case 'detonator':
+      p.detonator = true;
+      break;
+    case 'wallpass':
+      p.wallPass = true;
+      break;
+    case 'bombpass':
+      p.bombPass = true;
+      break;
+    case 'flamepass':
+      p.flamePass = true;
+      break;
+    case 'mystery':
+      p.invincibleFor = MYSTERY_DURATION;
+      break;
+    case 'life':
+      p.lives = Math.min(MAX_LIVES, p.lives + 1);
+      p.maxLives = Math.max(p.maxLives, p.lives);
+      break;
+    case 'curse':
+      p.curse = CURSES[randInt(state, CURSES.length)];
+      p.curseFor = CURSE_DURATION;
       break;
   }
 }
