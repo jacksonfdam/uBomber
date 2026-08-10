@@ -30,6 +30,7 @@ import type {
   BombState,
   GameState,
   MapDef,
+  MatchConfig,
   PlayerInput,
   PlayerState,
   PowerUpType,
@@ -45,15 +46,24 @@ const DIRS: Vec2[] = [
   { x: 0, y: -1 },
 ];
 
+const DEATHMATCH: MatchConfig = { mode: 'deathmatch' };
+
 /** Builds the initial state for a match. Same map + roster + seed on every
  * peer produces the same arena. */
 export function createGame(
   def: MapDef,
   roster: RosterEntry[],
-  seed: number
+  seed: number,
+  config: MatchConfig = DEATHMATCH
 ): GameState {
-  if (roster.length < 2 || roster.length > MAX_SLOTS) {
-    throw new Error(`roster must have 2..${MAX_SLOTS} players`);
+  // A campaign stage is one player against monsters; an arena needs two.
+  const minPlayers = config.mode === 'campaign' ? 1 : 2;
+  if (roster.length < minPlayers || roster.length > MAX_SLOTS) {
+    throw new Error(`roster must have ${minPlayers}..${MAX_SLOTS} players`);
+  }
+  const setup = config.mode === 'campaign' ? config.campaign : undefined;
+  if (config.mode === 'campaign' && !setup) {
+    throw new Error('campaign matches need a CampaignSetup');
   }
   const { grid, spawns } = parseMap(def, seed);
 
@@ -72,6 +82,13 @@ export function createGame(
     maxLives: Math.max(1, entry.lives ?? 1),
     respawnIn: 0,
     invulnFor: 0,
+    detonator: false,
+    wallPass: false,
+    bombPass: false,
+    flamePass: false,
+    invincibleFor: 0,
+    curse: null,
+    curseFor: 0,
   }));
 
   return {
@@ -88,6 +105,34 @@ export function createGame(
     spawns,
     suddenDeathClosed: 0,
     rngState: (seed ^ 0x9e3779b9) | 0,
+    mode: config.mode,
+    campaign: setup
+      ? {
+          themeId: setup.themeId,
+          round: setup.round,
+          stage: setup.stage,
+          timeLimit: setup.timeLimit,
+          exit: { x: setup.exit.x, y: setup.exit.y },
+          exitRevealed: false,
+          exitEnraged: 0,
+          hidden: { ...setup.hidden },
+          timeUp: false,
+          cleared: false,
+          difficulty: setup.difficulty,
+        }
+      : null,
+    monsters: setup
+      ? setup.monsters.map((monster, index) => ({
+          id: index + 1,
+          species: monster.species,
+          pos: { x: monster.at.x + 0.5, y: monster.at.y + 0.5 },
+          dir: { x: monster.dir.x, y: monster.dir.y },
+          speed: monster.speed,
+          alive: true,
+          dyingFor: 0,
+        }))
+      : [],
+    nextMonsterId: setup ? setup.monsters.length + 1 : 1,
   };
 }
 
