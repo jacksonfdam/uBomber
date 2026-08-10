@@ -7,8 +7,15 @@ import {
   TILE_ROWS,
 } from '../core/constants';
 import { bombAt, SUDDEN_DEATH_ORDER, tileOf } from '../core/game';
-import type { GameState, PlayerInput, PlayerState, Vec2 } from '../core/types';
+import type {
+  AiDifficulty,
+  GameState,
+  PlayerInput,
+  PlayerState,
+  Vec2,
+} from '../core/types';
 import { IDLE_INPUT } from '../core/types';
+import { BOT_TUNING, hash01, type BotTuning, type HuntGoal } from './tuning';
 
 const DIRS: Vec2[] = [
   { x: 1, y: 0 },
@@ -16,9 +23,6 @@ const DIRS: Vec2[] = [
   { x: 0, y: 1 },
   { x: 0, y: -1 },
 ];
-
-/** How often the bot re-plans, in seconds. Keeps bots beatable and cheap. */
-const REPLAN_INTERVAL = 0.25;
 
 /**
  * One controller per bot slot. Call update() every tick with the authoritative
@@ -39,9 +43,14 @@ export class BotController {
   /** Slot-seasoned replan period so bots never decide in lockstep — identical
    * cadences made them pick the same BFS paths and walk stacked together. */
   private readonly cadence: number;
+  private readonly tuning: BotTuning;
 
-  constructor(public readonly slot: number) {
-    this.cadence = REPLAN_INTERVAL + ((slot * 13) % 5) * 0.02;
+  constructor(
+    public readonly slot: number,
+    public readonly difficulty: AiDifficulty = 'normal'
+  ) {
+    this.tuning = BOT_TUNING[difficulty];
+    this.cadence = this.tuning.replanInterval + ((slot * 13) % 5) * 0.02;
     this.replanIn = ((slot * 7) % 10) * 0.025;
   }
 
@@ -59,7 +68,8 @@ export class BotController {
     const next = this.path[0];
     const urgent =
       danger[here.y][here.x] !== Infinity ||
-      (next !== undefined && danger[next.y][next.x] < 0.6);
+      (next !== undefined &&
+        danger[next.y][next.x] < this.tuning.reactionThreshold);
 
     if (urgent || this.replanIn <= 0 || this.path.length === 0) {
       this.replanIn = this.cadence;
@@ -79,7 +89,15 @@ export class BotController {
   ): void {
     if (danger[here.y][here.x] !== Infinity) {
       this.stalledFor = 0;
-      this.path = fleePath(state, here, danger, me.speed, me.id, true);
+      this.path = fleePath(
+        state,
+        here,
+        danger,
+        me.speed,
+        this.tuning,
+        me.id,
+        true
+      );
       return;
     }
 
@@ -91,7 +109,15 @@ export class BotController {
         y: here.y,
         range: me.flameRange,
       });
-      this.path = fleePath(state, here, withBomb, me.speed, me.id, true);
+      this.path = fleePath(
+        state,
+        here,
+        withBomb,
+        me.speed,
+        this.tuning,
+        me.id,
+        true
+      );
       return;
     }
 
@@ -104,7 +130,9 @@ export class BotController {
       const t = tileOf(p.pos);
       return Math.abs(t.x - here.x) + Math.abs(t.y - here.y) <= 1;
     });
-    this.stalledFor = enemyNearby ? this.stalledFor + REPLAN_INTERVAL : 0;
+    this.stalledFor = enemyNearby
+      ? this.stalledFor + this.tuning.replanInterval
+      : 0;
 
     if (this.stalledFor > 2) {
       this.stalledFor = 0;
@@ -115,23 +143,34 @@ export class BotController {
       }
     }
 
-    this.path = huntPath(state, me, here, danger);
+    this.path = huntPath(state, me, here, danger, this.tuning.huntOrder);
   }
 
   private shouldBomb(state: GameState, me: PlayerState, here: Vec2): boolean {
     if (me.activeBombs >= me.bombCap) return false;
     if (bombAt(state, here.x, here.y)) return false;
     if (!blastHitsTarget(state, me, here)) return false;
+    // Easy bots let shots go by. Hashed rather than drawn so the RNG the
+    // simulation shares with every peer is never touched.
+    if (
+      this.tuning.hesitation > 0 &&
+      hash01(state.tick, this.slot) < this.tuning.hesitation
+    ) {
+      return false;
+    }
     const withBomb = dangerMap(state, {
       x: here.x,
       y: here.y,
       range: me.flameRange,
     });
-    const escape = fleePath(state, here, withBomb, me.speed);
+    const escape = fleePath(state, here, withBomb, me.speed, this.tuning);
     if (escape.length === 0) return false;
     // Only commit if the escape fits inside the fuse; as the match drags on,
     // accept tighter escapes so endgame duels actually resolve.
-    const margin = state.time > 90 ? 0.2 : 0.4;
+    const margin =
+      state.time > 90
+        ? this.tuning.lateEscapeMargin
+        : this.tuning.escapeMargin;
     return escape.length / me.speed <= BOMB_FUSE - margin;
   }
 
@@ -287,6 +326,7 @@ function fleePath(
   from: Vec2,
   danger: number[][],
   speed: number,
+  tuning: BotTuning,
   meId?: number,
   claim = false
 ): Vec2[] {
@@ -294,7 +334,10 @@ function fleePath(
     const blastAt = danger[y][x];
     if (blastAt === Infinity) return false;
     const arrival = dist / speed;
-    return arrival > blastAt - 0.35 && arrival < blastAt + FLAME_TTL + 0.25;
+    return (
+      arrival > blastAt - tuning.crossPadBefore &&
+      arrival < blastAt + FLAME_TTL + tuning.crossPadAfter
+    );
   };
 
   const claims = claimsFor(state);
@@ -342,7 +385,8 @@ function huntPath(
   state: GameState,
   me: PlayerState,
   from: Vec2,
-  danger: number[][]
+  danger: number[][],
+  order: HuntGoal[]
 ): Vec2[] {
   // While hunting there is no urgency: never route through a threatened tile
   // or another player.
@@ -350,39 +394,29 @@ function huntPath(
   const avoidDanger = (x: number, y: number) =>
     danger[y][x] !== Infinity || occupied.has(y * TILE_COLS + x);
 
-  // Priority 1: reachable power-up.
-  const toPowerUp = bfs(
-    state,
-    from,
-    (x, y) => state.powerups.some((u) => u.x === x && u.y === y),
-    avoidDanger
-  );
-  if (toPowerUp) return toPowerUp;
-
-  // Priority 2: a safe tile next to a crate (so the next plan drops a bomb).
-  const toCrate = bfs(
-    state,
-    from,
-    (x, y) => DIRS.some((d) => state.grid[y + d.y]?.[x + d.x] === 'crate'),
-    avoidDanger
-  );
-  if (toCrate) return toCrate;
-
-  // Priority 3: close in on the nearest living enemy.
-  const enemies = state.players.filter((p) => p.alive && p.id !== me.id);
   const enemyTiles = new Set(
-    enemies.map((p) => {
-      const t = tileOf(p.pos);
-      return `${t.x},${t.y}`;
-    })
+    state.players
+      .filter((p) => p.alive && p.id !== me.id)
+      .map((p) => {
+        const t = tileOf(p.pos);
+        return `${t.x},${t.y}`;
+      })
   );
-  const toEnemy = bfs(
-    state,
-    from,
-    (x, y) => DIRS.some((d) => enemyTiles.has(`${x + d.x},${y + d.y}`)),
-    avoidDanger
-  );
-  return toEnemy ?? [];
+
+  // A crate goal is a safe tile *next to* a crate, so the next plan bombs it;
+  // the same holds for enemies.
+  const goals: Record<HuntGoal, (x: number, y: number) => boolean> = {
+    powerup: (x, y) => state.powerups.some((u) => u.x === x && u.y === y),
+    crate: (x, y) =>
+      DIRS.some((d) => state.grid[y + d.y]?.[x + d.x] === 'crate'),
+    enemy: (x, y) => DIRS.some((d) => enemyTiles.has(`${x + d.x},${y + d.y}`)),
+  };
+
+  for (const goal of order) {
+    const path = bfs(state, from, goals[goal], avoidDanger);
+    if (path) return path;
+  }
+  return [];
 }
 
 /** Safe tile a few steps away; the slot seasons the pick so two stalled

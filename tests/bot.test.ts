@@ -202,3 +202,84 @@ describe('BotController', () => {
 function countCrates(state: GameState): number {
   return state.grid.flat().filter((t) => t === 'crate').length;
 }
+
+describe('bot difficulty', () => {
+  function fourBots(seed: number) {
+    return createGame(
+      loadMap('gamla-stan'),
+      [
+        { kind: 'bot' as const, name: 'A' },
+        { kind: 'bot' as const, name: 'B' },
+        { kind: 'bot' as const, name: 'C' },
+        { kind: 'bot' as const, name: 'D' },
+      ],
+      seed
+    );
+  }
+
+  function playFor(
+    state: GameState,
+    difficulty: 'easy' | 'normal' | 'hard',
+    seconds: number
+  ): void {
+    const bots = state.players.map((p) => new BotController(p.id, difficulty));
+    const ticks = Math.round(seconds / TICK_DT);
+    for (let i = 0; i < ticks && state.status === 'running'; i++) {
+      step(
+        state,
+        bots.map((b) => b.update(state, TICK_DT)),
+        TICK_DT
+      );
+    }
+  }
+
+  /** Bomb presses of a lone bot farming crates, with no rival to distract it. */
+  function bombPresses(
+    seed: number,
+    difficulty: 'easy' | 'normal' | 'hard'
+  ): number {
+    const state = createGame(
+      loadMap('gamla-stan'),
+      [
+        { kind: 'bot', name: 'A', lives: 99 },
+        { kind: 'human', name: 'B', lives: 99 },
+      ],
+      seed
+    );
+    const bot = new BotController(0, difficulty);
+    let presses = 0;
+    const ticks = Math.round(45 / TICK_DT);
+    for (let i = 0; i < ticks && state.status === 'running'; i++) {
+      const input = bot.update(state, TICK_DT);
+      if (input.bomb) presses++;
+      step(state, [input, IDLE_INPUT], TICK_DT);
+    }
+    return presses;
+  }
+
+  it('defaults to normal and reproduces it input for input', () => {
+    const a = fourBots(31);
+    const b = fourBots(31);
+    const defaults = a.players.map((p) => new BotController(p.id));
+    const explicit = b.players.map((p) => new BotController(p.id, 'normal'));
+
+    const ticks = Math.round(30 / TICK_DT);
+    for (let i = 0; i < ticks && a.status === 'running'; i++) {
+      const left = defaults.map((bot) => bot.update(a, TICK_DT));
+      const right = explicit.map((bot) => bot.update(b, TICK_DT));
+      expect(left).toEqual(right);
+      step(a, left, TICK_DT);
+      step(b, right, TICK_DT);
+    }
+  });
+
+  it.each([31, 7, 99])('lets easy bots pass up shots (seed %i)', (seed) => {
+    expect(bombPresses(seed, 'easy')).toBeLessThan(bombPresses(seed, 'normal'));
+  });
+
+  it('still keeps easy bots out of their own blasts', () => {
+    const state = fourBots(42);
+    playFor(state, 'easy', 10);
+    expect(state.players.filter((p) => p.alive).length).toBeGreaterThanOrEqual(3);
+  });
+});
